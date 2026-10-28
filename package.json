@@ -1,0 +1,55 @@
+{
+  "name": "madar",
+  "productName": "Madar",
+  "version": "1.0.0",
+  "description": "مدار: مهام وتقويم وملاحظات ودفاتر بخط اليد في تطبيق واحد للماك",
+  "main": "electron/main.js",
+  "license": "MIT",
+  "author": "Raeed Alotaibi",
+  "scripts": {
+    "postinstall": "node scripts/vendor.js",
+    "start": "electron .",
+    "dist": "electron-builder --mac dmg",
+    "dist:all": "electron-builder --mac dmg --arm64 --x64"
+  },
+  "devDependencies": {
+    "@fontsource/ibm-plex-sans-arabic": "5.3.0",
+    "@highlightjs/cdn-assets": "11.11.1",
+    "jspdf": "3.0.3",
+    "katex": "0.16.22",
+    "pdfjs-dist": "3.11.174",
+    "electron": "38.4.0",
+    "electron-builder": "26.0.12"
+  },
+  "build": {
+    "appId": "app.madar.desktop",
+    "productName": "Madar",
+    "copyright": "MIT License",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**",
+      "src/**",
+      "package.json",
+      "!src/.claude"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": "dmg",
+      "icon": "build/icon.png",
+      "identity": null,
+      "darkModeSupport": true
+    },
+    "dmg": {
+      "title": "Madar ${version}",
+      "artifactName": "Madar-${version}-${arch}.${ext}"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tuwra/madar.git"
+  },
+  "homepage": "https://github.com/tuwra/madar"
+}
