@@ -1,9 +1,13 @@
 name: Build the Mac app
 
 on:
-  push:
-    tags: ['v*']
+  release:
+    types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to attach the dmg files to (for example v1.2.0)
+        required: true
 
 permissions:
   contents: write
@@ -11,20 +15,21 @@ permissions:
 jobs:
   build:
     runs-on: macos-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx electron-builder --mac dmg --arm64 --x64 --publish never
-      - uses: actions/upload-artifact@v4
-        with:
-          name: madar-dmg
-          path: dist/*.dmg
-      - name: Attach to the release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*.dmg
+      # Spotlight indexing keeps the dmg volume busy on GitHub's Mac runners
+      - run: sudo mdutil -a -i off || true
+      # one architecture at a time: building both at once makes hdiutil fail
+      - run: npx electron-builder --mac dmg --x64 --publish never
+      - run: npx electron-builder --mac dmg --arm64 --publish never
+      - run: gh release upload "$TAG" dist/*.dmg --clobber
