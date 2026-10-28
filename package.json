@@ -1,7 +1,7 @@
 {
   "name": "madar",
   "productName": "Madar",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "مدار: مهام وتقويم وملاحظات ودفاتر بخط اليد في تطبيق واحد للماك",
   "main": "electron/main.js",
   "license": "MIT",

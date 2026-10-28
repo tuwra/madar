@@ -606,7 +606,7 @@ function renderNotebook(nb) {
     setZoom(z.z ?? ink.zoom, z.anchor, z.cx ?? z.sx, z.cy ?? z.sy);
   }
   function setZoom(z, anchor, cx, cy) {
-    ink.zoom = z; computeScale(); sizeShells();
+    ink.zoom = z; computeScale(); sizeShells(); rememberSpot();
     if (anchor) { const r = shells[anchor.i].getBoundingClientRect(); stage.scrollBy(r.left + anchor.x * scale - cx, r.top + anchor.y * scale - cy); }
     mountVisible();
     for (const v of V.values()) paint(v);
@@ -632,7 +632,28 @@ function renderNotebook(nb) {
   stage.addEventListener('scroll', () => {
     if (!scrollRaf) scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; updateCurrent(); });
     clearTimeout(regionTimer); regionTimer = setTimeout(refreshRegions, 40);
+    rememberSpot();
   });
+  // where the reader is: the page at the top of the screen and how far down it, plus the zoom
+  let lastTimer = null;
+  function saveSpot() {
+    clearTimeout(lastTimer); lastTimer = null;
+    const top = stage.getBoundingClientRect().top;
+    let page = 0;
+    shells.forEach((s, i) => { if (s.getBoundingClientRect().top - 20 <= top) page = i; });
+    const r = shells[page]?.getBoundingClientRect();
+    if (!r) return;
+    const spot = { page, y: Math.max(0, Math.round((top - r.top) / scale)), zoom: Math.round(ink.zoom * 1000) / 1000 };
+    if (JSON.stringify(spot) !== JSON.stringify(nb.last)) { nb.last = spot; save(); }
+  }
+  const rememberSpot = () => { clearTimeout(lastTimer); lastTimer = setTimeout(saveSpot, 400); };
+  function restoreSpot() {
+    const spot = nb.last, i = Math.min(spot?.page ?? ui.inkPage, nb.pages.length - 1);
+    if (!shells[i]) return;
+    const r = shells[i].getBoundingClientRect(), sr = stage.getBoundingClientRect();
+    stage.scrollBy({ top: r.top - sr.top + (spot && spot.page === i ? spot.y * scale : -20), behavior: 'instant' });
+    ui.inkPage = i; updateCurrent(); floatBar(); bar(); markThumb(); mountVisible();
+  }
   function updateCurrent() {
     const sr = stage.getBoundingClientRect(), mid = sr.top + sr.height * 0.4;
     let best = ui.inkPage, bd = Infinity;
@@ -1083,10 +1104,10 @@ function renderNotebook(nb) {
     viewOf: pg => V.get(pg), renderSel, drawInk, renderItems,
     rebuild(keep = ui.inkPage) { buildShells(); thumbs(); bar(); floatBar(); setTimeout(() => scrollToPage(Math.min(keep, nb.pages.length - 1), false), 0); },
   };
-  cleanup = () => { ro.disconnect(); io?.disconnect(); thumbIO?.disconnect(); cancelAnimationFrame(laser.raf); document.removeEventListener('keydown', onKey); document.removeEventListener('keyup', onKeyUp); inkApi = null; ink.sel = null; };
+  cleanup = () => { if (lastTimer && shells.length) saveSpot(); ro.disconnect(); io?.disconnect(); thumbIO?.disconnect(); cancelAnimationFrame(laser.raf); document.removeEventListener('keydown', onKey); document.removeEventListener('keyup', onKeyUp); inkApi = null; ink.sel = null; };
   bar(); floatBar(); thumbs();
   // a timer, not requestAnimationFrame: it also runs while the window is in the background
-  setTimeout(() => { lastW = stage.clientWidth; buildShells(); ro.observe(stage); scrollToPage(ui.inkPage, false); }, 0);
+  setTimeout(() => { lastW = stage.clientWidth; buildShells(); ro.observe(stage); restoreSpot(); }, 0);
 }
 
 /* ---------- page menus ---------- */
@@ -1151,7 +1172,12 @@ function insertImage() {
 }
 function selChanged(pg) { save(); inkApi.repaintPg(pg); inkApi.bar(); inkApi.refreshThumb(pg); }
 Object.assign(A, {
-  'open-nb': a => { ui.notebookId = a.dataset.nb; ui.inkPage = 0; ink.undo = []; ink.redo = []; ink.zoom = 1; render(); },
+  'open-nb': a => {
+    // reopen where you left off: same page, same spot on it, same zoom
+    const nb = state.notebooks.find(n => n.id === a.dataset.nb);
+    ui.notebookId = a.dataset.nb; ui.inkPage = Math.min(nb?.last?.page || 0, (nb?.pages.length || 1) - 1);
+    ink.undo = []; ink.redo = []; ink.zoom = nb?.last?.zoom || 1; render();
+  },
   'new-nb': () => notebookDialog(null),
   'nb-opts': a => notebookDialog(state.notebooks.find(n => n.id === a.dataset.nb)),
   'shelf-tab': a => { ui.shelfTab = a.dataset.t; render(); },
