@@ -12,7 +12,11 @@ function migrate(st) {
   }
   for (const nb of st.notebooks || []) {
     nb.kind ||= 'notebook'; nb.paperColor ||= 'white';
-    for (const pg of nb.pages) { pg.items ||= []; pg.strokes ||= []; }
+    if (nb.paper === 'planner') nb.paper = 'weekly';
+    for (const pg of nb.pages) {
+      pg.items ||= []; pg.strokes ||= []; pg.w ||= 1000; pg.h ||= 1414;
+      if (pg.paper === 'planner') pg.paper = 'weekly';
+    }
   }
   return st;
 }

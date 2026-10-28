@@ -1,25 +1,67 @@
 'use strict';
 /* ---------- notebooks & books: handwriting on paper and PDFs ---------- */
 
-const PW = 1000; // page width in page units; height depends on the page
-const pageH = pg => pg.h || 1414;
-const PAPERS = { blank: 'سادة', lined: 'مسطّر', narrow: 'مسطّر ضيق', grid: 'مربعات', dots: 'نقاط', cornell: 'كورنيل', planner: 'مخطط أسبوعي', todo: 'قائمة مهام', music: 'نوتة موسيقية' };
-const PAPER_COLORS = { white: ['#ffffff', '#d5dbe5', 'أبيض'], cream: ['#fbf6ea', '#e2d6bd', 'كريمي'], yellow: ['#fff7c7', '#e5d991', 'أصفر'], blue: ['#edf4ff', '#c4d5ee', 'أزرق'], green: ['#eefaf0', '#c3e2c9', 'أخضر'], dark: ['#1e2328', '#3a434c', 'داكن'] };
 const PEN_STYLES = { fountain: 'قلم حبر', ball: 'قلم جاف', brush: 'فرشاة' };
-const SHAPES = { line: ['خط', '╱'], arrow: ['سهم', '↗'], rect: ['مستطيل', '▭'], ellipse: ['دائرة', '◯'], triangle: ['مثلث', '△'] };
-const INK_PALETTE = ['#1f2937', '#2563eb', '#dc2626', '#16a34a', '#9333ea', '#ea580c', '#ffffff'];
-const HL_PALETTE = ['#fde047', '#86efac', '#93c5fd', '#f9a8d4', '#fdba74'];
-const TOOLS = [['pen', '✒️', 'قلم', 'P'], ['hl', '🖍️', 'تظليل', 'H'], ['eraser', '🧽', 'ممحاة', 'E'], ['lasso', '➰', 'تحديد', 'L'], ['shape', '🔷', 'أشكال', 'S'], ['text', '🔤', 'نص', 'T'], ['laser', '🔴', 'ليزر', 'K']];
+const SHAPES = { line: 'خط', arrow: 'سهم', rect: 'مستطيل', ellipse: 'دائرة', triangle: 'مثلث' };
+const TOOLS = [['pen', 'قلم', 'P'], ['hl', 'قلم تظليل', 'H'], ['eraser', 'ممحاة', 'E'], ['lasso', 'تحديد', 'L'], ['shape', 'أشكال', 'S'], ['text', 'نص', 'T'], ['image', 'صورة', 'I'], ['laser', 'مؤشر ليزر', 'K']];
 
 const ink = {
-  tool: 'pen', penStyle: 'fountain', color: INK_PALETTE[0], hl: HL_PALETTE[0], size: 3, hlSize: 4,
-  eraser: 'stroke', eraserSize: 16, eraseHlOnly: false, shape: 'rect', textSize: 28,
+  tool: 'pen', penStyle: 'fountain',
+  colors: { pen: ['#1f2937', '#2563eb', '#dc2626'], hl: ['#fde047', '#86efac', '#93c5fd'] },
+  colorIdx: { pen: 0, hl: 0 },
+  sizes: { pen: [1.5, 3, 5.5], hl: [3, 4.5, 7], eraser: [8, 18, 36] }, sizeIdx: { pen: 1, hl: 1, eraser: 1 },
+  eraser: 'stroke', eraseHlOnly: false, shape: 'rect', textSize: 28,
   zoom: 1, finger: 'auto', thumbs: false, marksOnly: false,
   undo: [], redo: [], penSeen: false, sel: null,
 };
-try { Object.assign(ink, JSON.parse(localStorage.getItem('madar-ink') || '{}'), { undo: [], redo: [], sel: null }); } catch { /* ignore */ }
-const keepInkPrefs = () => { try { const { undo, redo, sel, ...prefs } = ink; localStorage.setItem('madar-ink', JSON.stringify(prefs)); } catch { /* ignore */ } };
+try {
+  const saved = JSON.parse(localStorage.getItem('madar-ink2') || '{}');
+  for (const k of ['tool', 'penStyle', 'colors', 'colorIdx', 'sizes', 'sizeIdx', 'eraser', 'eraseHlOnly', 'shape', 'textSize', 'finger', 'thumbs']) if (saved[k] !== undefined) ink[k] = saved[k];
+  if (ink.tool === 'image') ink.tool = 'pen';
+} catch { /* ignore */ }
+const keepInkPrefs = () => { try { const { undo, redo, sel, clip, ...prefs } = ink; localStorage.setItem('madar-ink2', JSON.stringify(prefs)); } catch { /* ignore */ } };
+const toolKind = t => (t === 'shape' || t === 'text') ? 'pen' : t;
+const curColor = (t = ink.tool) => { const k = toolKind(t); return ink.colors[k]?.[ink.colorIdx[k]] ?? '#1f2937'; };
+const curSize = (t = ink.tool) => { const k = toolKind(t); return ink.sizes[k]?.[ink.sizeIdx[k]] ?? 3; };
 let inkApi = null;
+
+/* line icons, drawn in the style of the rest of the app */
+const ICON = {
+  back: '<path d="M9 5l7 7-7 7"/>',
+  pen: '<path d="M4.5 19.5l1-4.2L16 4.8a2 2 0 0 1 2.9 0l.3.3a2 2 0 0 1 0 2.9L8.7 18.5z"/><path d="M14.5 6.5l3 3"/>',
+  hl: '<path d="M8.5 13.5l7-7 4 4-7 7H8.5z"/><path d="M8.5 13.5L5 17v2h4l3.5-1.5"/><path d="M4 21h16" opacity=".5"/>',
+  eraser: '<path d="M7.5 19.5h12"/><path d="M4.9 14.9l8.6-8.6a2 2 0 0 1 2.8 0l2.4 2.4a2 2 0 0 1 0 2.8l-7.7 7.7a2 2 0 0 1-1.4.6H9.4a2 2 0 0 1-1.4-.6l-3.1-3.1a.9.9 0 0 1 0-1.2z"/><path d="M9 10.8l4.6 4.6"/>',
+  lasso: '<ellipse cx="12" cy="9.5" rx="8" ry="5.5" stroke-dasharray="3 2.6"/><path d="M7.5 13.8c-1.2 1.6-.4 3.4 1.6 3.4 1.6 0 2.2 1.6.9 3.3"/>',
+  shape: '<rect x="3.5" y="10.5" width="9" height="9" rx="1.5"/><circle cx="16" cy="8" r="4.5"/>',
+  text: '<path d="M5 7V5h14v2"/><path d="M12 5v14"/><path d="M9 19h6"/>',
+  image: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="9.5" r="1.7"/><path d="M20.5 15.5l-4.5-4.5-9 8.5"/>',
+  laser: '<circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="6.5" opacity=".45"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2" opacity=".45"/>',
+  undo: '<path d="M9.5 14.5L5 10l4.5-4.5"/><path d="M5 10h9.5a4.5 4.5 0 0 1 0 9H12"/>',
+  redo: '<path d="M14.5 14.5L19 10l-4.5-4.5"/><path d="M19 10H9.5a4.5 4.5 0 0 0 0 9H12"/>',
+  pages: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>',
+  mark: '<path d="M7 4.5h10v15l-5-3.6-5 3.6z"/>',
+  markOn: '<path d="M7 4.5h10v15l-5-3.6-5 3.6z" fill="currentColor"/>',
+  addPage: '<path d="M13.5 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9z"/><path d="M13.5 3.5V9H19"/><path d="M12 12v5M9.5 14.5h5"/>',
+  more: '<circle cx="6" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="18" cy="12" r="1.3" fill="currentColor"/>',
+  hand: '<path d="M8 13V6.5a1.5 1.5 0 0 1 3 0V12"/><path d="M11 11V5a1.5 1.5 0 0 1 3 0v6"/><path d="M14 11V6.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-.5a6 6 0 0 1-4.9-2.5L3.8 14a1.5 1.5 0 0 1 2.4-1.8L8 14.5"/>',
+  zoomIn: '<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5M8 10.5h5M10.5 8v5"/>',
+  zoomOut: '<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5M8 10.5h5"/>',
+  fountain: '<path d="M12 3l4.5 7.5L12 21l-4.5-10.5z"/><path d="M12 10.5V14"/><circle cx="12" cy="10" r=".8" fill="currentColor"/>',
+  ball: '<path d="M9.5 3h5v11l-2.5 6.5L9.5 14z"/><path d="M9.5 14h5"/>',
+  brush: '<path d="M14 4l6 6-6.5 6.5-6-6z"/><path d="M7.5 10.5c-2.5.5-3.5 3-3.5 5.5 0 1.6-.8 2.6-1.5 3 3.5 1.2 8.5.4 9.5-3.5"/>',
+  eraseStroke: '<path d="M3 14c3-6 5 4 8-1s5 3 7-1"/><path d="M4 20L20 4" opacity=".6"/>',
+  erasePart: '<path d="M3 14c3-6 5 4 8-1"/><path d="M15 12c1.5 2 3 2.5 6 0"/><circle cx="13" cy="12.5" r="3" stroke-dasharray="2 1.6"/>',
+  eraseHl: '<path d="M8.5 13.5l7-7 4 4-7 7H8.5z"/><path d="M4 20L20 4" opacity=".6"/>',
+  line: '<path d="M5 19L19 5"/>',
+  arrow: '<path d="M5 19L19 5"/><path d="M10 5h9v9"/>',
+  rect: '<rect x="4" y="6" width="16" height="12" rx="1.5"/>',
+  ellipse: '<ellipse cx="12" cy="12" rx="8.5" ry="6.5"/>',
+  triangle: '<path d="M12 4.5l8.5 15h-17z"/>',
+  dup: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+  cut: '<circle cx="6" cy="7" r="2.5"/><circle cx="6" cy="17" r="2.5"/><path d="M8.2 8.3L20 18M8.2 15.7L20 6"/>',
+  trash: '<path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/>',
+};
+const ic = (name, cls = '') => `<svg class="icon ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICON[name]}</svg>`;
 
 /* ---------- pdf ---------- */
 if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
@@ -34,22 +76,6 @@ async function loadPdf(key) {
   }
   return pdfDocs.get(key);
 }
-const pdfCache = new Map();
-async function pdfCanvas(key, n, px) {
-  const id = `${key}:${n}:${Math.round(px)}`;
-  if (pdfCache.has(id)) return pdfCache.get(id);
-  const p = (async () => {
-    const doc = await loadPdf(key), page = await doc.getPage(n);
-    const vp1 = page.getViewport({ scale: 1 }), vp = page.getViewport({ scale: px / vp1.width });
-    const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
-    // 'print' renders without requestAnimationFrame, so pages still draw while the window is in the background
-    await page.render({ canvasContext: c.getContext('2d'), viewport: vp, intent: 'print' }).promise;
-    return c;
-  })();
-  pdfCache.set(id, p);
-  if (pdfCache.size > 40) pdfCache.delete(pdfCache.keys().next().value);
-  return p;
-}
 
 /* ---------- images on pages ---------- */
 const imgCache = new Map();
@@ -63,41 +89,7 @@ function pageImage(key, onLoad) {
   return null;
 }
 
-/* ---------- drawing primitives ---------- */
-function drawPaper(c, nb, pg, H) {
-  const [bg, line] = PAPER_COLORS[pg.paperColor || nb.paperColor || 'white'] || PAPER_COLORS.white;
-  const paper = pg.pdfPage ? 'blank' : (pg.paper || nb.paper || 'blank');
-  c.fillStyle = bg; c.fillRect(0, 0, PW, H);
-  c.strokeStyle = line; c.fillStyle = line; c.lineWidth = 1.3;
-  const hline = (y, x0 = 40, x1 = PW - 40) => { c.beginPath(); c.moveTo(x0, y); c.lineTo(x1, y); c.stroke(); };
-  const vline = (x, y0, y1) => { c.beginPath(); c.moveTo(x, y0); c.lineTo(x, y1); c.stroke(); };
-  if (paper === 'lined' || paper === 'narrow') {
-    const step = paper === 'lined' ? 44 : 32;
-    for (let y = 140; y < H - 40; y += step) hline(y);
-    c.strokeStyle = '#f0a8a8'; vline(PW - 110, 40, H - 40);
-  } else if (paper === 'grid') {
-    for (let x = 20; x <= PW; x += 40) vline(x, 0, H);
-    for (let y = 27; y <= H; y += 40) hline(y, 0, PW);
-  } else if (paper === 'dots') {
-    for (let x = 20; x <= PW; x += 40) for (let y = 27; y <= H; y += 40) { c.beginPath(); c.arc(x, y, 2.2, 0, 7); c.fill(); }
-  } else if (paper === 'cornell') {
-    for (let y = 196; y < H - 280; y += 44) hline(y, 40, PW - 300);
-    c.lineWidth = 2; hline(150, 30, PW - 30); hline(H - 260, 30, PW - 30); vline(PW - 300, 150, H - 260);
-  } else if (paper === 'planner') {
-    c.lineWidth = 2; hline(120, 40, PW - 40);
-    const top = 140, rowH = (H - 60 - top) / 7;
-    c.font = '600 26px "IBM Plex Sans Arabic", sans-serif'; c.textAlign = 'right';
-    for (let i = 0; i < 7; i++) {
-      const y = top + i * rowH;
-      c.lineWidth = 1.3; c.strokeRect(40, y, PW - 80, rowH - 12);
-      c.fillText(DOW[i], PW - 58, y + 36);
-    }
-  } else if (paper === 'todo') {
-    for (let y = 160; y < H - 60; y += 56) { hline(y + 20, 110, PW - 40); c.lineWidth = 2; c.strokeRect(PW - 96, y - 6, 26, 26); c.lineWidth = 1.3; }
-  } else if (paper === 'music') {
-    for (let y = 150; y < H - 120; y += 120) for (let k = 0; k < 5; k++) hline(y + k * 14);
-  }
-}
+
 function drawStroke(c, s) {
   const p = s.pts; if (!p.length) return;
   c.save();
@@ -159,22 +151,6 @@ function drawTextItem(c, it) {
     c.fillText(line, x, y); y += it.size * 1.4;
   }
   c.restore();
-}
-// paint a whole page (used for thumbnails and export)
-async function paintPage(c, nb, pg, scale) {
-  const H = pageH(pg);
-  c.setTransform(scale, 0, 0, scale, 0, 0);
-  drawPaper(c, nb, pg, H);
-  if (pg.pdfPage && nb.pdf) { try { c.drawImage(await pdfCanvas(nb.pdf, pg.pdfPage, PW * scale), 0, 0, PW, H); } catch { /* missing */ } }
-  for (const it of pg.items) {
-    if (it.type === 'image') {
-      let bm = pageImage(it.blob);
-      if (!bm) { const b = await store.getBlob(it.blob); if (b) { bm = await createImageBitmap(b); imgCache.set(it.blob, bm); } }
-      if (bm) c.drawImage(bm, it.x, it.y, it.w, it.h);
-    }
-  }
-  for (const s of pg.strokes) drawStroke(c, s);
-  for (const it of pg.items) if (it.type === 'text') drawTextItem(c, it);
 }
 
 /* ---------- geometry ---------- */
@@ -260,6 +236,32 @@ function shapePts(kind, s, e) {
   return ellipsePts((x0 + x1) / 2, (y0 + y1) / 2, Math.abs(x1 - x0) / 2, Math.abs(y1 - y0) / 2);
 }
 
+
+/* ---------- painting whole pages ---------- */
+// PDF pages are rendered straight into the target canvas at its real pixel size, so text stays sharp
+async function renderPdfPage(c, nb, pg, pxW, sig) {
+  const doc = await loadPdf(nb.pdf), page = await doc.getPage(pg.pdfPage);
+  const vp1 = page.getViewport({ scale: 1 }), vp = page.getViewport({ scale: pxW / vp1.width });
+  c.save(); c.setTransform(1, 0, 0, 1, 0, 0);
+  // 'print' renders without requestAnimationFrame, so pages still draw while the window is in the background
+  const task = page.render({ canvasContext: c, viewport: vp, intent: 'print' });
+  if (sig) sig.cancel = () => task.cancel();
+  try { await task.promise; } finally { c.restore(); }
+}
+async function paintPage(c, nb, pg, scale) {
+  c.setTransform(scale, 0, 0, scale, 0, 0);
+  drawPaper(c, nb, pg);
+  if (pg.pdfPage && nb.pdf) { try { await renderPdfPage(c, nb, pg, pageW(pg) * scale); } catch { /* missing */ } }
+  for (const it of pg.items) {
+    if (it.type !== 'image') continue;
+    let bm = pageImage(it.blob);
+    if (!bm) { const b = await store.getBlob(it.blob); if (b) { bm = await createImageBitmap(b); imgCache.set(it.blob, bm); } }
+    if (bm) c.drawImage(bm, it.x, it.y, it.w, it.h);
+  }
+  for (const s of pg.strokes) drawStroke(c, s);
+  for (const it of pg.items) if (it.type === 'text') drawTextItem(c, it);
+}
+
 /* ---------- shelf ---------- */
 function renderInk() {
   const nb = state.notebooks.find(n => n.id === ui.notebookId);
@@ -269,60 +271,84 @@ function renderInk() {
   const list = state.notebooks.filter(n => (ui.shelfTab === 'all' || (ui.shelfTab === 'fav' ? n.fav : (n.kind || 'notebook') === ui.shelfTab)) && (!q || n.name.includes(q)))
     .sort((a, b) => (b.opened || 0) - (a.opened || 0));
   view.innerHTML = `<div class="wrap wide">
-    <div class="page-head"><div><h1>الدفاتر والكتب</h1><div class="sub">اكتب بخط يدك، ظلّل، وعلّق على كتبك وملفات PDF.</div></div>
+    <div class="page-head"><div><h1>الدفاتر والكتب</h1><div class="sub">اكتب بخط يدك، خطط ليومك، وعلّق على كتبك وملفات PDF.</div></div>
       <div class="row wrap">
-        <button class="btn primary" data-act="new-nb">＋ دفتر جديد</button>
-        <button class="btn" data-act="import-book">📕 استيراد كتاب PDF</button>
-        ${desktop ? '<button class="btn" data-act="import-book-drive">△ من قوقل درايف</button>' : ''}
+        <button class="btn primary" data-act="new-nb">دفتر جديد</button>
+        <button class="btn" data-act="import-book">استيراد PDF</button>
+        ${desktop ? '<button class="btn" data-act="import-book-drive">من قوقل درايف</button>' : ''}
       </div></div>
     <div class="shelf-bar">
-      <div class="tabs">${[['all', 'الكل'], ['notebook', 'الدفاتر'], ['book', 'الكتب'], ['fav', '★ المفضلة']].map(([k, v]) => `<button class="tab ${ui.shelfTab === k ? 'on' : ''}" data-act="shelf-tab" data-t="${k}">${v}</button>`).join('')}</div>
+      <div class="tabs">${[['all', 'الكل'], ['notebook', 'الدفاتر'], ['book', 'الكتب'], ['fav', 'المفضلة']].map(([k, v]) => `<button class="tab ${ui.shelfTab === k ? 'on' : ''}" data-act="shelf-tab" data-t="${k}">${v}</button>`).join('')}</div>
       <input type="search" id="shelf-search" placeholder="ابحث…" value="${esc(q)}">
     </div>
     <div class="shelf">
-      ${list.map(n => `<div class="nb" style="--c:${n.color}">
-        <button class="nb-cover ${n.cover ? 'has-img' : ''}" data-act="open-nb" data-nb="${n.id}">${n.cover ? `<img src="${n.cover}" alt="">` : `<span>${esc(n.name)}</span>`}${n.fav ? '<i class="fav">★</i>' : ''}</button>
-        <div class="nb-info"><div><b>${esc(n.name)}</b><div class="nb-meta">${n.kind === 'book' ? 'كتاب' : 'دفتر'} · ${n.pages.length} صفحة</div></div><button class="btn small ghost" data-act="nb-opts" data-nb="${n.id}" aria-label="خيارات">⋯</button></div>
-      </div>`).join('') || '<div class="empty" style="grid-column:1/-1">ما فيه شي هنا بعد</div>'}
+      ${list.map(n => {
+        const p0 = n.pages[0] || {}, land = pageW(p0) > pageH(p0);
+        return `<div class="nb ${land ? 'land' : ''}" style="--c:${n.color}">
+        <button class="nb-cover ${n.cover ? 'has-img' : ''}" data-act="open-nb" data-nb="${n.id}" style="aspect-ratio:${pageW(p0)} / ${pageH(p0)}">${n.cover ? `<img src="${n.cover}" alt="">` : `<span>${esc(n.name)}</span>`}${n.fav ? `<i class="fav">${ic('markOn')}</i>` : ''}</button>
+        <div class="nb-info"><div><b>${esc(n.name)}</b><div class="nb-meta">${n.kind === 'book' ? 'كتاب' : n.planner ? 'مخطط' : 'دفتر'} · ${n.pages.length} صفحة</div></div><button class="tb small" data-act="nb-opts" data-nb="${n.id}" aria-label="خيارات">${ic('more')}</button></div>
+      </div>`;
+      }).join('') || '<div class="empty" style="grid-column:1/-1">ما فيه شي هنا بعد</div>'}
     </div></div>`;
   $('#shelf-search').addEventListener('input', e => { ui.shelfSearch = e.target.value; const pos = e.target.selectionStart; renderInk(); const i = $('#shelf-search'); i.focus(); i.setSelectionRange(pos, pos); });
 }
+
+function templatePicker(paper, color) {
+  const group = g => Object.entries(PAPERS).filter(([, [, gg]]) => gg === g).map(([k, [v]]) => `<label class="tpl"><input type="radio" name="paper" value="${k}" ${k === paper ? 'checked' : ''}><span><canvas data-tpl="${k}" width="120" height="170"></canvas>${v}</span></label>`).join('');
+  return `<span class="note">أساسية</span><div class="tpl-grid">${group('basic')}</div>
+    <span class="note">مخططات</span><div class="tpl-grid">${group('planner')}</div>
+    <span class="note">لون الورق</span><div class="swatches">${Object.entries(PAPER_COLORS).map(([k, [bg, , name]]) => `<label title="${name}"><input type="radio" name="paperColor" value="${k}" ${k === (color || 'white') ? 'checked' : ''}><span style="--c:${bg}"></span></label>`).join('')}</div>`;
+}
+const sizePicker = (size = 'a4', land = false) => `<div class="row wrap">
+  <label>المقاس<select name="size">${Object.entries(PAPER_SIZES).map(([k, [n]]) => `<option value="${k}" ${k === size ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+  <label>الاتجاه<span class="seg"><label><input type="radio" name="orient" value="p" ${land ? '' : 'checked'}><span class="o-p" title="عمودي"></span></label><label><input type="radio" name="orient" value="l" ${land ? 'checked' : ''}><span class="o-l" title="بالعرض"></span></label></span></label>
+</div>`;
+// draw the template previews whenever a dialog showing them opens
+new MutationObserver(() => {
+  $$('canvas[data-tpl]:not([data-drawn])').forEach(cv => {
+    cv.dataset.drawn = 1;
+    const c = cv.getContext('2d'); c.setTransform(cv.width / 1000, 0, 0, cv.width / 1000, 0, 0);
+    drawPaper(c, { color: '#4f46e5' }, { paper: cv.dataset.tpl, w: 1000, h: 1414 });
+  });
+}).observe(document.getElementById('dlg'), { childList: true, subtree: true });
+
 function notebookDialog(nb) {
-  const n = nb || { name: '', color: COLORS[3], paper: 'lined', paperColor: 'white' };
-  openDialog(`<h3>${nb ? 'خيارات ' + (nb.kind === 'book' ? 'الكتاب' : 'الدفتر') : 'دفتر جديد'}</h3>
-    <input name="name" class="title-input" value="${esc(n.name)}" placeholder="الاسم" required autofocus>
-    ${n.kind === 'book' ? '' : `<span class="note">قالب الورق</span>${templatePicker(n.paper, n.paperColor)}`}
-    <span class="note">لون الغلاف</span>${swatches('color', n.color)}
-    ${nb ? `<label class="check-row"><input type="checkbox" name="fav" ${nb.fav ? 'checked' : ''}> ★ في المفضلة</label>
-      <div class="row wrap"><button class="btn" value="dup" formnovalidate>تكرار</button><button class="btn" value="pdf" formnovalidate>تصدير PDF</button></div>` : ''}
-    ${actions(!!nb)}`, (fd, v) => {
+  if (!nb) {
+    openDialog(`<h3>دفتر جديد</h3>
+      <input name="name" class="title-input" placeholder="اسم الدفتر" required autofocus>
+      <div class="kind-grid">
+        <label><input type="radio" name="preset" value="plain" checked><span><b>دفتر</b><small>صفحات بالقالب اللي تختاره</small></span></label>
+        <label><input type="radio" name="preset" value="year"><span><b>مخطط ${new Date().getFullYear()}</b><small>أهداف، وشهور، وأسابيع، ومتتبع عادات لكل شهر</small></span></label>
+        <label><input type="radio" name="preset" value="month"><span><b>مخطط يومي للشهر</b><small>صفحة شهرية وصفحة لكل يوم</small></span></label>
+      </div>
+      ${sizePicker()}
+      ${templatePicker('lined', 'white')}
+      <span class="note">لون الغلاف</span>${swatches('color', COLORS[3])}
+      ${actions(false)}`, fd => {
+      const size = fd.get('size'), land = fd.get('orient') === 'l', preset = fd.get('preset'), paper = fd.get('paper') || 'lined';
+      const dims = pageDims(size, land);
+      const pages = preset === 'plain' ? [{ id: uid(), strokes: [], items: [], ...dims, paper, tpl: tplInit(paper) }] : plannerPages(preset, size, land);
+      const x = { id: uid(), kind: 'notebook', planner: preset !== 'plain', name: fd.get('name').trim(), color: fd.get('color') || COLORS[3], paper, paperColor: fd.get('paperColor') || 'white', size, created: Date.now(), pages };
+      state.notebooks.push(x); ui.notebookId = x.id; ui.inkPage = 0;
+      save(); render();
+    });
+    return;
+  }
+  openDialog(`<h3>${nb.kind === 'book' ? 'خيارات الكتاب' : 'خيارات الدفتر'}</h3>
+    <input name="name" class="title-input" value="${esc(nb.name)}" required>
+    <span class="note">لون الغلاف</span>${swatches('color', nb.color)}
+    <label class="check-row"><input type="checkbox" name="fav" ${nb.fav ? 'checked' : ''}> في المفضلة</label>
+    <div class="row wrap"><button class="btn" value="dup" formnovalidate>تكرار</button><button class="btn" value="pdf" formnovalidate>تصدير PDF</button></div>
+    ${actions(true)}`, (fd, v) => {
     if (v === 'delete') return void setTimeout(() => ask(`تحذف «${esc(nb.name)}» بكل صفحاته؟`, 'حذف', () => {
       state.notebooks = state.notebooks.filter(x => x !== nb); if (nb.pdf) store.delBlob(nb.pdf); save(); render();
     }));
     if (v === 'dup') { state.notebooks.push({ ...structuredClone(nb), id: uid(), name: nb.name + ' (نسخة)', fav: false }); save(); render(); return; }
     if (v === 'pdf') return void exportPdf(nb);
-    const data = { name: fd.get('name').trim(), color: fd.get('color') || COLORS[3] };
-    if (n.kind !== 'book') Object.assign(data, { paper: fd.get('paper') || 'lined', paperColor: fd.get('paperColor') || 'white' });
-    if (nb) Object.assign(nb, data, { fav: fd.get('fav') === 'on' });
-    else {
-      const x = { id: uid(), kind: 'notebook', ...data, created: Date.now(), pages: [{ id: uid(), strokes: [], items: [] }] };
-      state.notebooks.push(x); ui.notebookId = x.id; ui.inkPage = 0;
-    }
+    Object.assign(nb, { name: fd.get('name').trim(), color: fd.get('color') || nb.color, fav: fd.get('fav') === 'on' });
     save(); render();
   });
 }
-function templatePicker(paper, color) {
-  return `<div class="tpl-grid">${Object.entries(PAPERS).map(([k, v]) => `<label class="tpl"><input type="radio" name="paper" value="${k}" ${k === paper ? 'checked' : ''}><span><canvas data-tpl="${k}" width="60" height="80"></canvas>${v}</span></label>`).join('')}</div>
-  <div class="swatches">${Object.entries(PAPER_COLORS).map(([k, [bg, , name]]) => `<label title="${name}"><input type="radio" name="paperColor" value="${k}" ${k === (color || 'white') ? 'checked' : ''}><span style="--c:${bg}"></span></label>`).join('')}</div>`;
-}
-// draw the little template previews once a dialog containing them opens
-new MutationObserver(() => {
-  $$('canvas[data-tpl]:not([data-drawn])').forEach(cv => {
-    cv.dataset.drawn = 1;
-    const c = cv.getContext('2d'); c.setTransform(60 / PW, 0, 0, 60 / PW, 0, 0);
-    drawPaper(c, {}, { paper: cv.dataset.tpl }, 1414);
-  });
-}).observe(document.getElementById('dlg'), { childList: true, subtree: true });
 
 async function importBook(files) {
   for (const f of files) {
@@ -335,12 +361,14 @@ async function importBook(files) {
       const pages = [];
       for (let n = 1; n <= doc.numPages; n++) {
         const vp = (await doc.getPage(n)).getViewport({ scale: 1 });
-        pages.push({ id: uid(), pdfPage: n, h: Math.round(PW * vp.height / vp.width), strokes: [], items: [] });
-        if (n % 20 === 0) toast(`جاري استيراد «${f.name}»… ${n}/${doc.numPages}`, 60000);
+        const k = 1000 / Math.min(vp.width, vp.height);
+        pages.push({ id: uid(), pdfPage: n, w: Math.round(vp.width * k), h: Math.round(vp.height * k), strokes: [], items: [] });
+        if (n % 25 === 0) toast(`جاري استيراد «${f.name}»… ${n}/${doc.numPages}`, 60000);
       }
-      const coverCanvas = await pdfCanvas(key, 1, 320);
-      const cover = coverCanvas.toDataURL('image/jpeg', 0.82);
-      const nb = { id: uid(), kind: 'book', name: f.name.replace(/\.pdf$/i, ''), color: '#475569', pdf: key, cover, paper: 'blank', paperColor: 'white', created: Date.now(), pages };
+      const nb = { id: uid(), kind: 'book', name: f.name.replace(/\.pdf$/i, ''), color: '#475569', pdf: key, paper: 'blank', paperColor: 'white', created: Date.now(), pages };
+      const cv = document.createElement('canvas'); cv.width = 360; cv.height = Math.round(360 * pageH(pages[0]) / pageW(pages[0]));
+      await paintPage(cv.getContext('2d'), nb, pages[0], 360 / pageW(pages[0]));
+      nb.cover = cv.toDataURL('image/jpeg', 0.85);
       state.notebooks.push(nb); save();
       toast(`تمت إضافة «${nb.name}» (${pages.length} صفحة)`);
     } catch (err) { console.error(err); toast(`ما قدرت أفتح «${f.name}». تأكد إنه ملف PDF سليم.`, 4000); }
@@ -351,9 +379,9 @@ async function importBook(files) {
 /* ---------- export ---------- */
 async function pageBlob(nb, pg, scale = 2, type = 'image/png') {
   const c = document.createElement('canvas');
-  c.width = PW * scale; c.height = pageH(pg) * scale;
+  c.width = Math.round(pageW(pg) * scale); c.height = Math.round(pageH(pg) * scale);
   await paintPage(c.getContext('2d'), nb, pg, scale);
-  return new Promise(res => c.toBlob(res, type, 0.9));
+  return new Promise(res => c.toBlob(res, type, 0.92));
 }
 async function exportPdf(nb) {
   if (!window.jspdf) return toast('أداة تصدير PDF مو متوفرة');
@@ -361,16 +389,14 @@ async function exportPdf(nb) {
   const { jsPDF } = window.jspdf;
   let doc = null;
   for (const [i, pg] of nb.pages.entries()) {
-    const H = pageH(pg), w = 595, h = 595 * H / PW;
-    const blob = await pageBlob(nb, pg, 1.6, 'image/jpeg');
+    const w = pageW(pg) * 0.595, h = pageH(pg) * 0.595, o = w > h ? 'l' : 'p';
+    const blob = await pageBlob(nb, pg, 2, 'image/jpeg');
     const data = new Uint8Array(await blob.arrayBuffer());
-    if (!doc) doc = new jsPDF({ unit: 'pt', format: [w, h], orientation: h > w ? 'p' : 'l' });
-    else doc.addPage([w, h], h > w ? 'p' : 'l');
+    if (!doc) doc = new jsPDF({ unit: 'pt', format: [w, h], orientation: o }); else doc.addPage([w, h], o);
     doc.addImage(data, 'JPEG', 0, 0, w, h);
     if (i % 10 === 9) toast(`جاري تجهيز ملف PDF… ${i + 1}/${nb.pages.length}`, 60000);
   }
-  const bytes = new Uint8Array(doc.output('arraybuffer'));
-  await saveOut(nb.name + '.pdf', bytes);
+  await saveOut(nb.name + '.pdf', new Uint8Array(doc.output('arraybuffer')));
 }
 async function saveOut(name, bytes, toDrive = false) {
   if (desktop) {
@@ -382,69 +408,158 @@ async function saveOut(name, bytes, toDrive = false) {
   }
 }
 
-/* ---------- the notebook editor ---------- */
+/* ---------- the notebook editor: pages stacked vertically, scroll between them ---------- */
 function renderNotebook(nb) {
   view.classList.add('full');
   nb.opened = Date.now();
+  for (const pg of nb.pages) { pg.items ||= []; pg.strokes ||= []; pg.w ||= 1000; pg.h ||= 1414; }
   if (ui.inkPage >= nb.pages.length) ui.inkPage = nb.pages.length - 1;
-  view.innerHTML = `<div class="ink tool-${ink.tool}"><div class="ink-bar"></div>
-    <div class="ink-body">
-      <aside class="thumbs" ${ink.thumbs ? '' : 'hidden'}></aside>
-      <div class="ink-stage"><div class="sheet-wrap"><div class="sheet">
-        <canvas class="c-bg"></canvas><canvas class="c-ink"></canvas><canvas class="c-live"></canvas>
-        <div class="ink-items"></div><div class="sel-layer"></div>
-      </div></div></div>
-    </div></div>`;
-  const root = $('.ink'), stage = $('.ink-stage'), sheet = $('.sheet'), itemsBox = $('.ink-items'), selLayer = $('.sel-layer');
-  const [bg, inkC, live] = $$('canvas', sheet);
-  const ctx = { bg: bg.getContext('2d'), ink: inkC.getContext('2d'), live: live.getContext('2d') };
-  const page = () => nb.pages[ui.inkPage];
-  for (const pg of nb.pages) pg.items ||= [];
-  let css = 1, bgToken = 0;
+  view.innerHTML = `<div class="ink"><div class="ink-bar"></div>
+    <div class="ink-body"><div class="ink-stage"><div class="pages-col"></div></div><aside class="thumbs" hidden></aside></div>
+    <div class="ink-float"><button class="tb small" data-act="ink-zoom" data-z="-1" title="تصغير">${ic('zoomOut')}</button><button class="zoom-n" data-act="ink-zoom" data-z="0" title="رجوع للحجم الأصلي"></button><button class="tb small" data-act="ink-zoom" data-z="1" title="تكبير">${ic('zoomIn')}</button><span class="tb-sep"></span><span class="pg-n"></span></div>
+    <div class="ink-pop" hidden></div></div>`;
+  const root = $('.ink'), stage = $('.ink-stage'), col = $('.pages-col'), pop = $('.ink-pop');
+  let scale = 1, shells = [], io = null;
+  const V = new Map(); // page object -> mounted view
+  const curPg = () => nb.pages[ui.inkPage];
 
-  /* layout & painting */
-  function layout() {
-    const r = stage.getBoundingClientRect(), H = pageH(page());
-    const fit = Math.max(0.1, Math.min((r.width - 32) / PW, (r.height - 32) / H));
-    css = fit * ink.zoom;
-    sheet.style.width = PW * css + 'px'; sheet.style.height = H * css + 'px';
-    // keep canvases under the browser's size limit when zoomed in
-    const dpr = Math.min(window.devicePixelRatio || 1, Math.sqrt(16e6 / (PW * H * css * css)));
-    const res = css * dpr;
-    for (const [k, c] of [['bg', bg], ['ink', inkC], ['live', live]]) {
-      c.width = Math.round(PW * res); c.height = Math.round(H * res);
-      ctx[k].setTransform(res, 0, 0, res, 0, 0);
+  /* sizing */
+  function computeScale() {
+    const maxW = Math.max(...nb.pages.map(pageW));
+    const fit = Math.min((stage.clientWidth - 72) / maxW, 1.1);
+    scale = Math.max(0.12, fit * ink.zoom);
+  }
+  function sizeShells() {
+    nb.pages.forEach((pg, i) => { const s = shells[i]; s.style.width = pageW(pg) * scale + 'px'; s.style.height = pageH(pg) * scale + 'px'; });
+  }
+  function buildShells() {
+    io?.disconnect();
+    for (const v of V.values()) v.sig?.cancel?.();
+    V.clear();
+    col.innerHTML = nb.pages.map((_, i) => `<div class="pg" data-i="${i}"></div>`).join('');
+    shells = [...col.children];
+    computeScale(); sizeShells();
+    io = new IntersectionObserver(es => {
+      for (const en of es) { const i = +en.target.dataset.i; if (en.isIntersecting) mount(i); else unmount(i); }
+    }, { root: stage, rootMargin: '150% 0px' });
+    shells.forEach(s => io.observe(s));
+  }
+  function mount(i) {
+    const pg = nb.pages[i]; if (!pg || V.has(pg)) return;
+    const el = shells[i];
+    el.innerHTML = '<canvas class="c-bg"></canvas><canvas class="c-ink"></canvas><canvas class="c-live"></canvas><div class="ink-items"></div><div class="sel-layer"></div>';
+    const [bg, inkC, live] = el.querySelectorAll('canvas');
+    const v = { pg, el, cv: { bg, ink: inkC, live }, ctx: { bg: bg.getContext('2d'), ink: inkC.getContext('2d'), live: live.getContext('2d') }, items: el.querySelector('.ink-items'), selL: el.querySelector('.sel-layer'), tok: 0 };
+    V.set(pg, v); paint(v);
+  }
+  function unmount(i) {
+    const pg = nb.pages[i], v = V.get(pg); if (!v || v === act) return;
+    v.sig?.cancel?.(); v.el.innerHTML = ''; V.delete(pg);
+  }
+  const indexOf = pg => nb.pages.indexOf(pg);
+  function paint(v) {
+    const W = pageW(v.pg), H = pageH(v.pg);
+    const dpr = Math.min(window.devicePixelRatio || 1, Math.sqrt(16e6 / (W * H * scale * scale)));
+    v.res = scale * dpr;
+    for (const k of ['bg', 'ink', 'live']) {
+      v.cv[k].width = Math.round(W * v.res); v.cv[k].height = Math.round(H * v.res);
+      v.ctx[k].setTransform(v.res, 0, 0, v.res, 0, 0);
     }
-    paintBg(res); redraw(); renderItems(); renderSel();
+    paintBg(v); drawInk(v); renderItems(v); renderSel(v);
   }
-  async function paintBg(res) {
-    const tok = ++bgToken, pg = page(), H = pageH(pg);
-    drawPaper(ctx.bg, nb, pg, H);
-    if (pg.pdfPage && nb.pdf) {
-      try { const c = await pdfCanvas(nb.pdf, pg.pdfPage, PW * res); if (tok === bgToken) ctx.bg.drawImage(c, 0, 0, PW, H); }
-      catch { if (tok === bgToken) toast('ما قدرت أعرض صفحة الكتاب'); }
+  async function paintBg(v) {
+    const tok = ++v.tok;
+    v.sig?.cancel?.();
+    drawPaper(v.ctx.bg, nb, v.pg);
+    if (v.pg.pdfPage && nb.pdf) {
+      const sig = {}; v.sig = sig;
+      try { await renderPdfPage(v.ctx.bg, nb, v.pg, pageW(v.pg) * v.res, sig); }
+      catch (e) { if (tok === v.tok && e?.name !== 'RenderingCancelledException') console.warn(e); }
     }
   }
-  function redraw(skip) {
-    const H = pageH(page());
-    ctx.ink.clearRect(0, 0, PW, H);
-    for (const it of page().items) if (it.type === 'image' && !skip?.has(it)) drawImageItem(ctx.ink, it, () => redraw(skip));
-    for (const s of page().strokes) if (!skip?.has(s)) drawStroke(ctx.ink, s);
+  function drawInk(v, skip) {
+    const c = v.ctx.ink;
+    c.clearRect(0, 0, pageW(v.pg), pageH(v.pg));
+    for (const it of v.pg.items) if (it.type === 'image' && !skip?.has(it)) drawImageItem(c, it, () => drawInk(v, skip));
+    for (const s of v.pg.strokes) if (!skip?.has(s)) drawStroke(c, s);
   }
-  function renderItems() {
-    itemsBox.innerHTML = page().items.filter(it => it.type === 'text').map(it =>
-      `<div class="ti" dir="auto" contenteditable="${ink.tool === 'text'}" data-item="${it.id}" style="left:${it.x * css}px;top:${it.y * css}px;width:${it.w * css}px;font-size:${it.size * css}px;color:${it.color}">${esc(it.text)}</div>`).join('');
+  function renderItems(v) {
+    v.items.innerHTML = v.pg.items.filter(it => it.type === 'text').map(it =>
+      `<div class="ti" dir="auto" contenteditable="${ink.tool === 'text'}" data-item="${it.id}" style="left:${it.x * scale}px;top:${it.y * scale}px;width:${it.w * scale}px;font-size:${it.size * scale}px;color:${it.color}">${esc(it.text)}</div>`).join('');
   }
-  const clearLive = () => ctx.live.clearRect(0, 0, PW, pageH(page()));
+  const clearLive = v => v.ctx.live.clearRect(0, 0, pageW(v.pg), pageH(v.pg));
+  const repaintPg = pg => { const v = V.get(pg); if (v) { drawInk(v); renderItems(v); renderSel(v); } };
+
+  /* zoom (trackpad pinch arrives as ctrl+wheel) */
+  let zp = null, wheelTimer = null;
+  function anchorAt(cx, cy) {
+    for (const [i, s] of shells.entries()) {
+      const r = s.getBoundingClientRect();
+      if (cy >= r.top - 16 && cy <= r.bottom + 16) return { i, x: (cx - r.left) / scale, y: (cy - r.top) / scale };
+    }
+    return null;
+  }
+  function zoomPreview(k, cx, cy) {
+    if (!zp) { const r = col.getBoundingClientRect(); zp = { ox: cx - r.left, oy: cy - r.top, sx: cx, sy: cy, z0: ink.zoom, k: 1, anchor: anchorAt(cx, cy) }; }
+    zp.z = Math.max(0.4, Math.min(5, zp.z0 * k)); zp.cx = cx; zp.cy = cy;
+    col.style.transformOrigin = `${zp.ox}px ${zp.oy}px`;
+    col.style.transform = `translate(${cx - zp.sx}px, ${cy - zp.sy}px) scale(${zp.z / zp.z0})`;
+  }
+  function commitZoom() {
+    if (!zp) return;
+    const z = zp; zp = null;
+    col.style.transform = ''; col.style.transformOrigin = '';
+    setZoom(z.z ?? ink.zoom, z.anchor, z.cx ?? z.sx, z.cy ?? z.sy);
+  }
+  function setZoom(z, anchor, cx, cy) {
+    ink.zoom = z; computeScale(); sizeShells();
+    if (anchor) { const r = shells[anchor.i].getBoundingClientRect(); stage.scrollBy(r.left + anchor.x * scale - cx, r.top + anchor.y * scale - cy); }
+    for (const v of V.values()) paint(v);
+    floatBar(); keepInkPrefs();
+  }
+  function zoomBy(dir) {
+    const r = stage.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const z = dir === 0 ? 1 : Math.max(0.4, Math.min(5, ink.zoom * (dir > 0 ? 1.25 : 0.8)));
+    setZoom(z, anchorAt(cx, cy), cx, cy);
+  }
+  stage.addEventListener('wheel', e => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    const prevK = zp ? zp.z / zp.z0 : 1;
+    zoomPreview(prevK * Math.exp(-e.deltaY * 0.012), e.clientX, e.clientY);
+    clearTimeout(wheelTimer); wheelTimer = setTimeout(commitZoom, 160);
+  }, { passive: false });
+
+  /* scrolling and the current page */
+  let scrollRaf = 0;
+  stage.addEventListener('scroll', () => { if (!scrollRaf) scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; updateCurrent(); }); });
+  function updateCurrent() {
+    const sr = stage.getBoundingClientRect(), mid = sr.top + sr.height * 0.4;
+    let best = ui.inkPage, bd = Infinity;
+    shells.forEach((s, i) => { const r = s.getBoundingClientRect(); const d = mid < r.top ? r.top - mid : mid > r.bottom ? mid - r.bottom : 0; if (d < bd) { bd = d; best = i; } });
+    if (best !== ui.inkPage) { ui.inkPage = best; floatBar(); bar(); markThumb(); }
+  }
+  function scrollToPage(i, smooth = true) {
+    if (!shells[i]) return;
+    ui.inkPage = i;
+    const r = shells[i].getBoundingClientRect(), sr = stage.getBoundingClientRect();
+    stage.scrollBy({ top: r.top - sr.top - 20, behavior: smooth ? 'smooth' : 'instant' });
+    floatBar(); bar(); markThumb();
+  }
+  function floatBar() {
+    $('.zoom-n', root).textContent = Math.round(ink.zoom * 100) + '%';
+    $('.pg-n', root).textContent = `${ui.inkPage + 1} / ${nb.pages.length}`;
+  }
 
   /* undo */
-  const snap = () => ({ pg: page(), strokes: page().strokes.slice(), items: page().items.slice() });
-  const pushUndo = s => { ink.undo.push(s || snap()); if (ink.undo.length > 120) ink.undo.shift(); ink.redo = []; };
+  const snap = pg => ({ pg, strokes: pg.strokes.slice(), items: pg.items.slice() });
+  const pushUndo = s => { ink.undo.push(s.pg ? s : snap(s)); if (ink.undo.length > 150) ink.undo.shift(); ink.redo = []; };
   function restore(from, to) {
     const s = from.pop(); if (!s) return;
-    to.push({ pg: s.pg, strokes: s.pg.strokes.slice(), items: s.pg.items.slice() });
+    to.push(snap(s.pg));
     s.pg.strokes = s.strokes; s.pg.items = s.items;
-    ink.sel = null; redraw(); renderItems(); renderSel(); save(); bar(); thumbs();
+    ink.sel = null; repaintPg(s.pg); save(); bar(); refreshThumb(s.pg);
+    if (!V.has(s.pg) && indexOf(s.pg) >= 0) scrollToPage(indexOf(s.pg));
   }
 
   /* selection */
@@ -452,251 +567,237 @@ function renderNotebook(nb) {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const s of sel.strokes) for (const p of s.pts) { const pad = s.tool === 'hl' ? s.size * 2.5 : s.size; x0 = Math.min(x0, p[0] - pad); y0 = Math.min(y0, p[1] - pad); x1 = Math.max(x1, p[0] + pad); y1 = Math.max(y1, p[1] + pad); }
     for (const it of sel.items) { const h = it.h || it.size * 1.6; x0 = Math.min(x0, it.x); y0 = Math.min(y0, it.y); x1 = Math.max(x1, it.x + it.w); y1 = Math.max(y1, it.y + h); }
-    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+    return { x: x0, y: y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0) };
   }
-  function renderSel(offset) {
+  function renderSel(v, o) {
     const sel = ink.sel;
-    if (!sel) { selLayer.innerHTML = ''; return; }
-    const b = sel.box, o = offset || { dx: 0, dy: 0, k: 1 };
-    const x = (b.x + o.dx) * css, y = (b.y + o.dy) * css, w = b.w * o.k * css, h = b.h * o.k * css;
-    const n = sel.strokes.size + sel.items.size;
-    selLayer.innerHTML = `<div class="sel-box" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px"><span class="sel-handle"></span></div>
-      ${offset ? '' : `<div class="sel-bar" style="left:${Math.max(0, x)}px;top:${Math.max(0, y - 46)}px">
-        <span class="hint">${n} محدد</span>
-        ${INK_PALETTE.slice(0, 6).map(c => `<button class="sw small" style="--c:${c}" data-act="sel-color" data-c="${c}" aria-label="لون"></button>`).join('')}
-        <button class="ib" data-act="sel-dup">تكرار</button><button class="ib" data-act="sel-cut">قص</button><button class="ib danger" data-act="sel-del">حذف</button></div>`}`;
+    if (!sel || sel.pg !== v.pg) { v.selL.innerHTML = ''; return; }
+    const b = sel.box; o ||= { dx: 0, dy: 0, k: 1 };
+    const x = (b.x + o.dx) * scale, y = (b.y + o.dy) * scale, w = b.w * o.k * scale, h = b.h * o.k * scale;
+    const colors = ink.colors.pen;
+    v.selL.innerHTML = `<div class="sel-box" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px"><span class="sel-handle"></span></div>
+      ${o.moving ? '' : `<div class="sel-bar" style="left:${Math.max(0, x)}px;top:${Math.max(-6, y - 50)}px">
+        ${colors.map(c => `<button class="cslot small" style="--c:${c}" data-act="sel-color" data-c="${c}" aria-label="لون"></button>`).join('')}
+        <span class="tb-sep"></span>
+        <button class="tb small" data-act="sel-dup" title="تكرار">${ic('dup')}</button><button class="tb small" data-act="sel-cut" title="قص">${ic('cut')}</button><button class="tb small danger" data-act="sel-del" title="حذف">${ic('trash')}</button></div>`}`;
   }
-  function selectIn(poly) {
-    const strokes = new Set(page().strokes.filter(s => s.pts.filter(p => inPoly(p, poly)).length >= s.pts.length * 0.5));
-    const items = new Set(page().items.filter(it => inPoly([it.x + it.w / 2, it.y + (it.h || it.size) / 2], poly)));
-    if (!strokes.size && !items.size) { ink.sel = null; renderSel(); return; }
-    ink.sel = { strokes, items, box: null };
-    ink.sel.box = selBox(ink.sel);
-    renderSel();
+  function selectIn(v, poly) {
+    const strokes = new Set(v.pg.strokes.filter(s => s.pts.filter(p => inPoly(p, poly)).length >= s.pts.length * 0.5));
+    const items = new Set(v.pg.items.filter(it => inPoly([it.x + it.w / 2, it.y + (it.h || it.size) / 2], poly)));
+    ink.sel = strokes.size || items.size ? { pg: v.pg, strokes, items } : null;
+    if (ink.sel) ink.sel.box = selBox(ink.sel);
+    renderSel(v);
   }
   function transformSel(dx, dy, k) {
-    const sel = ink.sel, ax = sel.box.x, ay = sel.box.y;
-    const f = (x, y) => [ax + (x - ax) * k + dx, ay + (y - ay) * k + dy];
-    const pg = page(), ns = new Set(), ni = new Set();
-    pg.strokes = pg.strokes.map(s => {
-      if (!sel.strokes.has(s)) return s;
-      const t = { ...s, size: s.size * k, pts: s.pts.map(p => [...f(p[0], p[1]).map(v => Math.round(v * 10) / 10), p[2]]) };
-      ns.add(t); return t;
-    });
+    const sel = ink.sel, pg = sel.pg, ax = sel.box.x, ay = sel.box.y;
+    const f = (x, y) => [Math.round((ax + (x - ax) * k + dx) * 10) / 10, Math.round((ay + (y - ay) * k + dy) * 10) / 10];
+    const ns = new Set(), ni = new Set();
+    pg.strokes = pg.strokes.map(s => { if (!sel.strokes.has(s)) return s; const t = { ...s, size: s.size * k, pts: s.pts.map(p => [...f(p[0], p[1]), p[2]]) }; ns.add(t); return t; });
     pg.items = pg.items.map(it => {
       if (!sel.items.has(it)) return it;
       const [x, y] = f(it.x, it.y);
       const t = { ...it, x, y, w: it.w * k, ...(it.h ? { h: it.h * k } : {}), ...(it.size ? { size: it.size * k } : {}) };
       ni.add(t); return t;
     });
-    ink.sel = { strokes: ns, items: ni, box: null }; ink.sel.box = selBox(ink.sel);
+    ink.sel = { pg, strokes: ns, items: ni }; ink.sel.box = selBox(ink.sel);
   }
-  function previewSel(dx, dy, k) {
-    const sel = ink.sel, ax = sel.box.x, ay = sel.box.y;
-    clearLive();
-    ctx.live.save();
-    ctx.live.translate(ax + dx, ay + dy); ctx.live.scale(k, k); ctx.live.translate(-ax, -ay);
-    for (const it of sel.items) if (it.type === 'image') drawImageItem(ctx.live, it);
-    for (const s of sel.strokes) drawStroke(ctx.live, s);
-    ctx.live.restore();
+  function previewSel(v, dx, dy, k) {
+    const sel = ink.sel, ax = sel.box.x, ay = sel.box.y, c = v.ctx.live;
+    clearLive(v);
+    c.save(); c.translate(ax + dx, ay + dy); c.scale(k, k); c.translate(-ax, -ay);
+    for (const it of sel.items) if (it.type === 'image') drawImageItem(c, it);
+    for (const s of sel.strokes) drawStroke(c, s);
+    c.restore();
     for (const it of sel.items) {
-      const el = itemsBox.querySelector(`[data-item="${it.id}"]`);
-      if (el) el.style.transform = `translate(${(ax + (it.x - ax) * k + dx - it.x) * css}px, ${(ay + (it.y - ay) * k + dy - it.y) * css}px) scale(${k})`;
+      const el = v.items.querySelector(`[data-item="${it.id}"]`);
+      if (el) { el.style.transformOrigin = '0 0'; el.style.transform = `translate(${(ax + (it.x - ax) * k + dx - it.x) * scale}px, ${(ay + (it.y - ay) * k + dy - it.y) * scale}px) scale(${k})`; }
     }
-    renderSel({ dx, dy, k });
+    renderSel(v, { dx, dy, k, moving: true });
   }
 
   /* toolbar */
   function bar() {
-    const t = ink.tool;
-    const colorRow = (pal, cur) => `<div class="ib-group">${pal.map(c => `<button class="sw ${c === cur ? 'on' : ''}" style="--c:${c}" data-act="ink-color" data-c="${c}" aria-label="لون"></button>`).join('')}<label class="sw custom" title="لون مخصص" style="--c:${cur}"><input type="color" data-change="ink-color" value="${cur}"></label></div>`;
-    const sizeRow = (sizes, cur, key) => `<div class="ib-group">${sizes.map(s => `<button class="sz ${s === cur ? 'on' : ''}" data-act="ink-size" data-k="${key}" data-s="${s}" aria-label="سماكة"><span style="width:${Math.min(22, s * 2 + 3)}px;height:${Math.min(22, s * 2 + 3)}px"></span></button>`).join('')}</div>`;
+    const t = ink.tool, k = toolKind(t);
     let opts = '';
-    if (t === 'pen') opts = `<div class="ib-group"><select data-change="pen-style">${Object.entries(PEN_STYLES).map(([k, v]) => `<option value="${k}" ${k === ink.penStyle ? 'selected' : ''}>${v}</option>`).join('')}</select></div>${colorRow(INK_PALETTE, ink.color)}${sizeRow([1.5, 3, 5, 8], ink.size, 'size')}`;
-    if (t === 'hl') opts = colorRow(HL_PALETTE, ink.hl) + sizeRow([3, 4, 6], ink.hlSize, 'hlSize');
-    if (t === 'eraser') opts = `<div class="ib-group"><button class="ib ${ink.eraser === 'stroke' ? 'on' : ''}" data-act="eraser-mode" data-m="stroke">الخط كامل</button><button class="ib ${ink.eraser === 'part' ? 'on' : ''}" data-act="eraser-mode" data-m="part">جزء منه</button></div>${ink.eraser === 'part' ? sizeRow([8, 16, 32], ink.eraserSize, 'eraserSize') : ''}<div class="ib-group"><label class="ib"><input type="checkbox" data-change="erase-hl" ${ink.eraseHlOnly ? 'checked' : ''}> التظليل فقط</label></div>`;
-    if (t === 'shape') opts = `<div class="ib-group">${Object.entries(SHAPES).map(([k, [n, i]]) => `<button class="ib ${k === ink.shape ? 'on' : ''}" data-act="shape-kind" data-s="${k}" title="${n}">${i}</button>`).join('')}</div>${colorRow(INK_PALETTE, ink.color)}${sizeRow([1.5, 3, 5, 8], ink.size, 'size')}`;
-    if (t === 'text') opts = `${colorRow(INK_PALETTE, ink.color)}<div class="ib-group"><select data-change="text-size">${[[20, 'صغير'], [28, 'متوسط'], [40, 'كبير'], [60, 'عنوان']].map(([v, n]) => `<option value="${v}" ${v === ink.textSize ? 'selected' : ''}>${n}</option>`).join('')}</select><span class="hint lbl">اضغط على الصفحة واكتب</span></div>`;
-    if (t === 'lasso') opts = '<div class="ib-group"><span class="hint">ارسم دائرة حول اللي تبي تحدده، بعدها اسحبه أو كبّره من الزاوية</span></div>';
-    if (t === 'laser') opts = '<div class="ib-group"><span class="hint">للشرح والعرض: الأثر يختفي لحاله وما ينحفظ</span></div>';
-    if (t === 'pen' || t === 'hl') opts += '<div class="ib-group"><span class="hint lbl">ارسم وثبّت لحظة = شكل مضبوط</span></div>';
-    const fingerLbl = { auto: '✋ تلقائي', draw: '✋ يرسم', pan: '✋ يحرّك' }[ink.finger];
+    if (['pen', 'hl', 'shape', 'text'].includes(t)) {
+      opts += ink.colors[k].map((c, i) => `<button class="cslot ${i === ink.colorIdx[k] ? 'on' : ''}" style="--c:${c}" data-act="ink-cslot" data-i="${i}" title="${i === ink.colorIdx[k] ? 'اضغط مرة ثانية عشان تغيّر اللون' : 'لون'}"></button>`).join('');
+    }
+    const sk = t === 'shape' ? 'pen' : t;
+    if (['pen', 'hl', 'shape'].includes(t) || (t === 'eraser' && ink.eraser === 'part')) {
+      opts += (opts ? '<span class="tb-sep"></span>' : '') + ink.sizes[sk].map((s, i) => `<button class="sslot ${i === ink.sizeIdx[sk] ? 'on' : ''}" data-act="ink-sslot" data-i="${i}" title="السماكة"><span style="width:${5 + i * 4}px;height:${5 + i * 4}px"></span></button>`).join('');
+    }
+    const pg = curPg();
     $('.ink-bar').innerHTML = `
-      <div class="ib-group"><button class="ib" data-act="ink-back">→ <span class="lbl">الرف</span></button><b class="nb-title">${esc(nb.name)}</b></div>
-      <div class="ib-group">${TOOLS.map(([k, i, n, key]) => `<button class="ib ${t === k ? 'on' : ''}" data-act="ink-tool" data-tool="${k}" title="${n} (${key})">${i} <span class="lbl">${n}</span></button>`).join('')}<button class="ib" data-act="ink-image" title="إدراج صورة">🖼️ <span class="lbl">صورة</span></button></div>
-      ${opts}
-      <div class="ib-group"><button class="ib" data-act="ink-undo" ${ink.undo.length ? '' : 'disabled'} title="تراجع (⌘Z)">↶</button><button class="ib" data-act="ink-redo" ${ink.redo.length ? '' : 'disabled'} title="إعادة (⇧⌘Z)">↷</button></div>
-      <div class="ib-group"><button class="ib" data-act="ink-zoom" data-z="-1" title="تصغير">−</button><button class="ib zoom-n" data-act="ink-zoom" data-z="0" title="ملء الشاشة">${Math.round(ink.zoom * 100)}%</button><button class="ib" data-act="ink-zoom" data-z="1" title="تكبير">＋</button><button class="ib" data-act="ink-finger" title="وش يسوي الإصبع على الشاشة">${fingerLbl}</button></div>
-      <div class="ib-group">
-        <button class="ib ${ink.thumbs ? 'on' : ''}" data-act="ink-thumbs" title="الصفحات">▦ <span class="lbl">الصفحات</span></button>
-        <button class="ib ${page().mark ? 'on' : ''}" data-act="ink-mark" title="علامة مرجعية">${page().mark ? '★' : '☆'}</button>
-        <button class="ib" data-act="ink-page" data-n="-1" ${ui.inkPage ? '' : 'disabled'} title="السابقة">›</button>
-        <span class="pg-n">${ui.inkPage + 1} / ${nb.pages.length}</span>
-        <button class="ib" data-act="ink-page" data-n="1" ${ui.inkPage < nb.pages.length - 1 ? '' : 'disabled'} title="التالية">‹</button>
-        <button class="ib" data-act="ink-add-page" title="صفحة جديدة بعد هذي">＋ <span class="lbl">صفحة</span></button>
-        <button class="ib" data-act="ink-more" title="خيارات الصفحة والدفتر">⋯</button>
+      <div class="tb-side"><button class="tb" data-act="ink-back" title="الرف">${ic('back')}</button><span class="nb-title">${esc(nb.name)}</span></div>
+      <div class="tb-tools">
+        ${TOOLS.map(([key, n, sc]) => `<button class="tb ${t === key ? 'on' : ''}" data-act="ink-tool" data-tool="${key}" title="${n} (${sc})">${ic(key === 'shape' ? (ink.shape || 'shape') : key === 'pen' ? (ink.penStyle === 'fountain' ? 'pen' : ink.penStyle) : key)}</button>`).join('')}
+        ${opts ? `<span class="tb-sep"></span>${opts}` : ''}
+      </div>
+      <div class="tb-side end">
+        <button class="tb" data-act="ink-undo" ${ink.undo.length ? '' : 'disabled'} title="تراجع (⌘Z)">${ic('undo')}</button>
+        <button class="tb" data-act="ink-redo" ${ink.redo.length ? '' : 'disabled'} title="إعادة (⇧⌘Z)">${ic('redo')}</button>
+        <span class="tb-sep"></span>
+        <button class="tb ${pg?.mark ? 'on' : ''}" data-act="ink-mark" title="علامة مرجعية">${ic(pg?.mark ? 'markOn' : 'mark')}</button>
+        <button class="tb ${ink.thumbs ? 'on' : ''}" data-act="ink-thumbs" title="الصفحات">${ic('pages')}</button>
+        <button class="tb" data-act="ink-add-page" title="صفحة جديدة بعد هذي">${ic('addPage')}</button>
+        <button class="tb" data-act="ink-more" title="المزيد">${ic('more')}</button>
       </div>`;
-    root.className = `ink tool-${t}`;
-    $$('.ti', itemsBox).forEach(el => el.contentEditable = t === 'text');
+    root.className = `ink tool-${t} ${fingerPans() ? 'finger-pan' : ''}`;
+    for (const v of V.values()) $$('.ti', v.items).forEach(el => { el.contentEditable = t === 'text'; });
   }
+  function openPop(btn) {
+    const t = ink.tool;
+    let html = '';
+    if (t === 'pen') html = Object.entries(PEN_STYLES).map(([k, n]) => `<button class="tb ${ink.penStyle === k ? 'on' : ''}" data-act="pen-style" data-s="${k}" title="${n}">${ic(k === 'fountain' ? 'fountain' : k)}</button>`).join('');
+    if (t === 'eraser') html = `<button class="tb ${ink.eraser === 'stroke' ? 'on' : ''}" data-act="eraser-mode" data-m="stroke" title="يمسح الخط كامل">${ic('eraseStroke')}</button><button class="tb ${ink.eraser === 'part' ? 'on' : ''}" data-act="eraser-mode" data-m="part" title="يمسح الجزء اللي تمر عليه">${ic('erasePart')}</button><span class="tb-sep"></span><button class="tb ${ink.eraseHlOnly ? 'on' : ''}" data-act="erase-hl" title="يمسح التظليل فقط">${ic('eraseHl')}</button>`;
+    if (t === 'shape') html = Object.entries(SHAPES).map(([k, n]) => `<button class="tb ${ink.shape === k ? 'on' : ''}" data-act="shape-kind" data-s="${k}" title="${n}">${ic(k)}</button>`).join('');
+    if (t === 'text') html = [[20, 14], [28, 17], [40, 21], [60, 26]].map(([v, px]) => `<button class="tb ${ink.textSize === v ? 'on' : ''}" data-act="text-size" data-s="${v}" title="حجم الخط"><span style="font-size:${px}px;font-weight:600">ع</span></button>`).join('');
+    if (t === 'laser' || t === 'lasso' || t === 'hl' || t === 'image') return;
+    pop.innerHTML = html; pop.hidden = false;
+    const r = btn.getBoundingClientRect(), rr = root.getBoundingClientRect();
+    pop.style.top = (r.bottom - rr.top + 6) + 'px';
+    pop.style.left = Math.max(8, r.left - rr.left + r.width / 2 - pop.offsetWidth / 2) + 'px';
+  }
+  const closePop = () => { pop.hidden = true; };
+  root.addEventListener('pointerdown', e => { if (!pop.hidden && !e.target.closest('.ink-pop') && !e.target.closest('[data-act="ink-tool"]')) closePop(); }, true);
 
   /* thumbnails */
   let thumbIO = null;
   function thumbs() {
-    const box = $('.thumbs'); if (!box) return;
+    const box = $('.thumbs', root);
     box.hidden = !ink.thumbs;
-    if (!ink.thumbs) return;
     thumbIO?.disconnect();
+    if (!ink.thumbs) return;
     const pages = nb.pages.map((pg, i) => [pg, i]).filter(([pg]) => !ink.marksOnly || pg.mark);
-    box.innerHTML = `<div class="thumbs-head"><b>الصفحات</b><label class="hint"><input type="checkbox" data-change="marks-only" ${ink.marksOnly ? 'checked' : ''}> ★ فقط</label></div>
-      ${pages.map(([pg, i]) => `<div class="thumb ${i === ui.inkPage ? 'on' : ''}"><button data-act="ink-goto" data-i="${i}"><canvas data-th="${i}" width="${120 * 2}" height="${Math.round(120 * 2 * pageH(pg) / PW)}"></canvas></button><span>${pg.mark ? '★ ' : ''}${i + 1}</span><button class="ib th-menu" data-act="thumb-menu" data-i="${i}" aria-label="خيارات">⋯</button></div>`).join('') || '<div class="hint" style="padding:12px">ما فيه صفحات بعلامة</div>'}`;
+    box.innerHTML = `<div class="thumbs-head"><b>الصفحات</b><button class="tb small ${ink.marksOnly ? 'on' : ''}" data-act="marks-only" title="المحفوظة بعلامة فقط">${ic(ink.marksOnly ? 'markOn' : 'mark')}</button></div>
+      ${pages.map(([pg, i]) => `<div class="thumb ${i === ui.inkPage ? 'on' : ''}" data-ti="${i}"><button data-act="ink-goto" data-i="${i}"><canvas data-th="${i}" width="${Math.round(pageW(pg) * 0.26)}" height="${Math.round(pageH(pg) * 0.26)}"></canvas></button><span>${i + 1}</span>${pg.mark ? `<i class="th-mark">${ic('markOn')}</i>` : ''}<button class="tb small th-menu" data-act="thumb-menu" data-i="${i}" aria-label="خيارات">${ic('more')}</button></div>`).join('') || '<div class="hint" style="padding:12px">ما فيه صفحات بعلامة</div>'}`;
     thumbIO = new IntersectionObserver(es => es.forEach(en => {
       if (!en.isIntersecting) return;
       thumbIO.unobserve(en.target);
       const pg = nb.pages[+en.target.dataset.th];
-      paintPage(en.target.getContext('2d'), nb, pg, en.target.width / PW);
-    }), { root: box, rootMargin: '300px' });
+      paintPage(en.target.getContext('2d'), nb, pg, en.target.width / pageW(pg));
+    }), { root: box, rootMargin: '400px' });
     $$('canvas[data-th]', box).forEach(c => thumbIO.observe(c));
+    markThumb();
+  }
+  function markThumb() {
+    const box = $('.thumbs', root); if (box.hidden) return;
+    $$('.thumb', box).forEach(t => t.classList.toggle('on', +t.dataset.ti === ui.inkPage));
     box.querySelector('.thumb.on')?.scrollIntoView({ block: 'nearest' });
   }
-  let thumbTimer = null;
-  const refreshThumb = () => {
-    clearTimeout(thumbTimer);
-    thumbTimer = setTimeout(() => { const c = $(`canvas[data-th="${ui.inkPage}"]`); if (c) paintPage(c.getContext('2d'), nb, page(), c.width / PW); }, 400);
-  };
-  function goPage(i) {
-    if (i < 0 || i >= nb.pages.length) return;
-    ui.inkPage = i; ink.undo = []; ink.redo = []; ink.sel = null;
-    layout(); bar(); thumbs();
+  const thumbTimers = new Map();
+  function refreshThumb(pg) {
+    clearTimeout(thumbTimers.get(pg));
+    thumbTimers.set(pg, setTimeout(() => {
+      const i = indexOf(pg), c = $(`canvas[data-th="${i}"]`, root);
+      if (c) paintPage(c.getContext('2d'), nb, pg, c.width / pageW(pg));
+    }, 500));
   }
-
-  /* zoom */
-  let zoomPreview = null;
-  function previewZoom(k, cx, cy) {
-    const r = sheet.getBoundingClientRect();
-    if (!zoomPreview) zoomPreview = { origin: [cx - r.left, cy - r.top], page: [(cx - r.left) / css, (cy - r.top) / css], screen: [cx, cy], zoom0: ink.zoom };
-    const z = Math.max(0.5, Math.min(5, zoomPreview.zoom0 * k));
-    const kk = z / zoomPreview.zoom0;
-    sheet.style.transformOrigin = `${zoomPreview.origin[0]}px ${zoomPreview.origin[1]}px`;
-    sheet.style.transform = `translate(${cx - zoomPreview.screen[0]}px, ${cy - zoomPreview.screen[1]}px) scale(${kk})`;
-    zoomPreview.z = z; zoomPreview.screenNow = [cx, cy];
-  }
-  function commitZoom() {
-    if (!zoomPreview) return;
-    const zp = zoomPreview; zoomPreview = null;
-    sheet.style.transform = ''; ink.zoom = zp.z ?? ink.zoom;
-    layout(); bar(); keepInkPrefs();
-    const r = sheet.getBoundingClientRect(), [sx, sy] = zp.screenNow || zp.screen;
-    stage.scrollBy(r.left + zp.page[0] * css - sx, r.top + zp.page[1] * css - sy);
-  }
-  let wheelTimer = null;
-  stage.addEventListener('wheel', e => {
-    if (!(e.ctrlKey || e.metaKey)) return; // a Mac trackpad pinch arrives as ctrl+wheel
-    e.preventDefault();
-    const k = zoomPreview ? (zoomPreview.z / zoomPreview.zoom0) * Math.exp(-e.deltaY * 0.01) : Math.exp(-e.deltaY * 0.01);
-    previewZoom(k, e.clientX, e.clientY);
-    clearTimeout(wheelTimer); wheelTimer = setTimeout(commitZoom, 180);
-  }, { passive: false });
 
   /* input */
-  const pt = e => {
-    const r = sheet.getBoundingClientRect();
+  const fingerPans = () => ink.finger === 'pan' || (ink.finger === 'auto' && ink.penSeen);
+  const pt = (e, v) => {
+    const r = v.el.getBoundingClientRect();
     const pr = e.pointerType === 'pen' ? (e.pressure || 0.5) : 0.5;
-    return [Math.round((e.clientX - r.left) / css * 10) / 10, Math.round((e.clientY - r.top) / css * 10) / 10, Math.round(pr * 100) / 100];
+    return [Math.round((e.clientX - r.left) / scale * 10) / 10, Math.round((e.clientY - r.top) / scale * 10) / 10, Math.round(pr * 100) / 100];
   };
   const touches = new Map();
-  let cur = null, mode = null, gesture = null, lasso = null, start = null, erasing = null, holdTimer = null, holdAnchor = null, selDrag = null;
-  const laser = { pts: [], raf: 0 };
-  const fingerPans = () => ink.finger === 'pan' || (ink.finger === 'auto' && ink.penSeen);
+  let act = null, cur = null, mode = null, gesture = null, lasso = null, start = null, erasing = null, holdTimer = null, holdAnchor = null, selDrag = null;
+  const laser = { pts: [], raf: 0, v: null };
 
-  function abortStroke() { cur = null; mode = null; lasso = null; clearTimeout(holdTimer); clearLive(); }
+  function abortStroke() { if (act) clearLive(act); cur = null; mode = null; lasso = null; clearTimeout(holdTimer); }
   function down(e) {
+    if (e.target.closest('.sel-bar') || (ink.tool === 'text' && e.target.closest('.ti'))) return;
     if (e.pointerType === 'pen' && !ink.penSeen) { ink.penSeen = true; bar(); }
     if (e.pointerType === 'touch') {
       touches.set(e.pointerId, [e.clientX, e.clientY]);
       if (touches.size >= 2) {
         abortStroke();
         const [a, b] = [...touches.values()];
-        gesture = { d0: dist(a, b) || 1, mid0: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], t0: Date.now(), moved: false, count: touches.size };
+        gesture = { d0: dist(a, b) || 1, mid0: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], last: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], t0: Date.now(), moved: false, count: touches.size };
         return;
       }
-      if (fingerPans()) { mode = 'pan'; start = [e.clientX, e.clientY]; return; }
+      if (fingerPans()) return; // the page scrolls natively
     }
     if (e.button > 0) return;
+    const shell = e.target.closest('.pg'); if (!shell) { if (ink.sel) { const v = V.get(ink.sel.pg); ink.sel = null; if (v) renderSel(v); } return; }
+    const v = V.get(nb.pages[+shell.dataset.i]); if (!v) return;
     e.preventDefault();
-    live.setPointerCapture(e.pointerId);
-    const p = pt(e), t = ink.tool;
-    if (ink.sel && t === 'lasso') {
-      const b = ink.sel.box, hx = b.x + b.w, hy = b.y + b.h, tol = 22 / css;
-      if (Math.abs(p[0] - hx) < tol && Math.abs(p[1] - hy) < tol) { mode = 'sel-scale'; selDrag = { p }; redraw(new Set([...ink.sel.strokes, ...ink.sel.items])); previewSel(0, 0, 1); return; }
-      if (p[0] > b.x && p[0] < hx && p[1] > b.y && p[1] < hy) { mode = 'sel-move'; selDrag = { p }; redraw(new Set([...ink.sel.strokes, ...ink.sel.items])); previewSel(0, 0, 1); return; }
+    col.setPointerCapture(e.pointerId);
+    act = v;
+    const i = indexOf(v.pg);
+    if (i !== ui.inkPage) { ui.inkPage = i; floatBar(); bar(); markThumb(); }
+    const p = pt(e, v), t = ink.tool;
+    if (ink.sel && ink.sel.pg === v.pg && t === 'lasso') {
+      const b = ink.sel.box, hx = b.x + b.w, hy = b.y + b.h, tol = 22 / scale;
+      const hit = Math.abs(p[0] - hx) < tol && Math.abs(p[1] - hy) < tol ? 'sel-scale' : (p[0] > b.x && p[0] < hx && p[1] > b.y && p[1] < hy ? 'sel-move' : null);
+      if (hit) { mode = hit; selDrag = { p, k: 1 }; drawInk(v, new Set([...ink.sel.strokes, ...ink.sel.items])); previewSel(v, 0, 0, 1); return; }
     }
-    if (ink.sel) { ink.sel = null; renderSel(); }
+    if (ink.sel) { const sv = V.get(ink.sel.pg); ink.sel = null; if (sv) renderSel(sv); }
     mode = t;
     if (t === 'pen' || t === 'hl') {
-      cur = { tool: t, style: t === 'hl' ? 'hl' : ink.penStyle, color: t === 'hl' ? ink.hl : ink.color, size: t === 'hl' ? ink.hlSize : ink.size, pts: [p] };
+      cur = { tool: t, style: t === 'hl' ? 'hl' : ink.penStyle, color: curColor(), size: curSize(), pts: [p] };
       holdAnchor = p; armHold();
-      drawStroke(ctx.live, cur);
-    } else if (t === 'eraser') { erasing = { before: snap(), changed: false }; eraseAt(p); }
+      drawStroke(v.ctx.live, cur);
+    } else if (t === 'eraser') { erasing = { before: snap(v.pg), changed: false }; eraseAt(v, p); }
     else if (t === 'lasso') lasso = [p];
-    else if (t === 'shape') { start = p; cur = { tool: 'pen', style: 'ball', color: ink.color, size: ink.size, shape: ink.shape, pts: [p] }; }
-    else if (t === 'text') { addText(p); mode = null; }
-    else if (t === 'laser') { laser.pts.push([p[0], p[1], performance.now()]); runLaser(); }
+    else if (t === 'shape') { start = p; cur = { tool: 'pen', style: 'ball', color: curColor(), size: curSize(), shape: ink.shape, pts: [p] }; }
+    else if (t === 'text') { addText(v, p); mode = null; }
+    else if (t === 'laser') { laser.v = v; laser.pts.push([p[0], p[1], performance.now()]); runLaser(); }
   }
   function armHold() {
     clearTimeout(holdTimer);
     holdTimer = setTimeout(() => {
-      if (!cur || cur.shape || mode !== cur.tool) return;
+      if (!cur || cur.shape || !act || (mode !== 'pen' && mode !== 'hl')) return;
       const r = recognize(cur.pts);
       if (!r) return;
       cur.pts = r; cur.shape = r.length === 2 ? 'line' : 'auto';
-      clearLive(); drawStroke(ctx.live, cur);
+      clearLive(act); drawStroke(act.ctx.live, cur);
     }, 550);
   }
   function move(e) {
     if (e.pointerType === 'touch' && touches.has(e.pointerId)) {
-      const prev = touches.get(e.pointerId);
       touches.set(e.pointerId, [e.clientX, e.clientY]);
       if (gesture) {
         const [a, b] = [...touches.values()]; if (!b) return;
         const d = dist(a, b), mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-        if (Math.abs(d / gesture.d0 - 1) > 0.04 || dist(mid, gesture.mid0) > 12) gesture.moved = true;
+        if (Math.abs(d / gesture.d0 - 1) > 0.05 || dist(mid, gesture.mid0) > 12) gesture.moved = true;
         if (gesture.moved) {
-          if (!zoomPreview) previewZoom(1, gesture.mid0[0], gesture.mid0[1]);
-          previewZoom(d / gesture.d0, mid[0], mid[1]);
+          if (Math.abs(d / gesture.d0 - 1) > 0.05 || zp) zoomPreview(d / gesture.d0, mid[0], mid[1]);
+          else { stage.scrollBy(gesture.last[0] - mid[0], gesture.last[1] - mid[1]); }
         }
+        gesture.last = mid;
         return;
       }
-      if (mode === 'pan') { stage.scrollBy(prev[0] - e.clientX, prev[1] - e.clientY); return; }
     }
-    if (!mode) {
-      if (ink.tool === 'eraser' && e.pointerType !== 'touch') { clearLive(); eraserCursor(pt(e)); }
+    if (!mode || !act) {
+      if (ink.tool === 'eraser' && e.pointerType !== 'touch') {
+        const shell = e.target.closest?.('.pg'), v = shell && V.get(nb.pages[+shell.dataset.i]);
+        for (const w of V.values()) if (w !== v) clearLive(w);
+        if (v) { clearLive(v); eraserCursor(v, pt(e, v)); }
+      }
       return;
     }
-    const evs = (e.getCoalescedEvents && e.getCoalescedEvents().length) ? e.getCoalescedEvents() : [e];
-    const p = pt(e);
+    const v = act, evs = (e.getCoalescedEvents && e.getCoalescedEvents().length) ? e.getCoalescedEvents() : [e];
+    const p = pt(e, v);
     if (mode === 'pen' || mode === 'hl') {
-      if (cur.shape) { if (cur.shape === 'line') { cur.pts[1] = [p[0], p[1], 0.5]; clearLive(); drawStroke(ctx.live, cur); } return; }
-      for (const ev of evs) cur.pts.push(pt(ev));
-      if (dist(p, holdAnchor) > 4 / css) { holdAnchor = p; armHold(); }
-      clearLive(); drawStroke(ctx.live, cur);
-    } else if (mode === 'eraser') for (const ev of evs) eraseAt(pt(ev));
+      if (cur.shape) { if (cur.shape === 'line') { cur.pts[1] = [p[0], p[1], 0.5]; clearLive(v); drawStroke(v.ctx.live, cur); } return; }
+      for (const ev of evs) cur.pts.push(pt(ev, v));
+      if (dist(p, holdAnchor) > 4 / scale) { holdAnchor = p; armHold(); }
+      clearLive(v); drawStroke(v.ctx.live, cur);
+    } else if (mode === 'eraser') for (const ev of evs) eraseAt(v, pt(ev, v));
     else if (mode === 'lasso') {
       lasso.push(p);
-      clearLive();
-      const c = ctx.live; c.save(); c.setLineDash([8 / css, 6 / css]); c.strokeStyle = '#4f46e5'; c.lineWidth = 1.5 / css; c.fillStyle = 'rgba(79,70,229,.06)';
+      clearLive(v);
+      const c = v.ctx.live; c.save(); c.setLineDash([8 / scale, 6 / scale]); c.strokeStyle = '#4f46e5'; c.lineWidth = 1.5 / scale; c.fillStyle = 'rgba(79,70,229,.06)';
       c.beginPath(); c.moveTo(lasso[0][0], lasso[0][1]); for (const q of lasso) c.lineTo(q[0], q[1]); c.closePath(); c.fill(); c.stroke(); c.restore();
-    } else if (mode === 'shape') { cur.pts = shapePts(ink.shape, start, p); clearLive(); drawStroke(ctx.live, cur); }
-    else if (mode === 'laser') { for (const ev of evs) { const q = pt(ev); laser.pts.push([q[0], q[1], performance.now()]); } }
-    else if (mode === 'sel-move') previewSel(p[0] - selDrag.p[0], p[1] - selDrag.p[1], 1);
-    else if (mode === 'sel-scale') {
-      const b = ink.sel.box;
-      selDrag.k = Math.max(0.1, Math.max((p[0] - b.x) / b.w, (p[1] - b.y) / b.h));
-      previewSel(0, 0, selDrag.k);
-    }
+    } else if (mode === 'shape') { cur.pts = shapePts(ink.shape, start, p); clearLive(v); drawStroke(v.ctx.live, cur); }
+    else if (mode === 'laser') for (const ev of evs) { const q = pt(ev, v); laser.pts.push([q[0], q[1], performance.now()]); }
+    else if (mode === 'sel-move') previewSel(v, p[0] - selDrag.p[0], p[1] - selDrag.p[1], 1);
+    else if (mode === 'sel-scale') { const b = ink.sel.box; selDrag.k = Math.max(0.1, Math.max((p[0] - b.x) / b.w, (p[1] - b.y) / b.h)); previewSel(v, 0, 0, selDrag.k); }
   }
   function up(e) {
-    if (e.pointerType === 'touch') {
+    if (e.pointerType === 'touch' && touches.has(e.pointerId)) {
       touches.delete(e.pointerId);
       if (gesture) {
         if (!touches.size) {
@@ -706,33 +807,31 @@ function renderNotebook(nb) {
         }
         return;
       }
-      if (mode === 'pan') { mode = null; return; }
     }
     clearTimeout(holdTimer);
-    const m = mode; mode = null;
+    const m = mode, v = act; mode = null;
+    if (!v) return;
     if (m === 'pen' || m === 'hl' || m === 'shape') {
-      if (!cur) return;
-      if (m === 'shape' && cur.pts.length < 2) { cur = null; clearLive(); return; }
-      pushUndo(); page().strokes.push(cur); drawStroke(ctx.ink, cur); clearLive(); cur = null;
-      save(); bar(); refreshThumb();
+      if (cur && !(m === 'shape' && cur.pts.length < 2)) { pushUndo(v.pg); v.pg.strokes.push(cur); drawStroke(v.ctx.ink, cur); save(); bar(); refreshThumb(v.pg); }
+      cur = null; clearLive(v);
     } else if (m === 'eraser') {
-      if (erasing?.changed) { pushUndo(erasing.before); save(); bar(); refreshThumb(); }
-      erasing = null; clearLive();
-    } else if (m === 'lasso') { clearLive(); if (lasso.length > 3) selectIn(lasso); lasso = null; }
+      if (erasing?.changed) { pushUndo(erasing.before); save(); bar(); refreshThumb(v.pg); }
+      erasing = null; clearLive(v);
+    } else if (m === 'lasso') { clearLive(v); if (lasso.length > 3) selectIn(v, lasso); lasso = null; }
     else if (m === 'sel-move' || m === 'sel-scale') {
-      const p = pt(e);
-      pushUndo();
+      const p = pt(e, v);
+      pushUndo(v.pg);
       if (m === 'sel-move') transformSel(p[0] - selDrag.p[0], p[1] - selDrag.p[1], 1); else transformSel(0, 0, selDrag.k || 1);
-      selDrag = null; clearLive(); redraw(); renderItems(); renderSel(); save(); bar(); refreshThumb();
+      selDrag = null; clearLive(v); drawInk(v); renderItems(v); renderSel(v); save(); bar(); refreshThumb(v.pg);
     }
+    if (m !== 'laser') act = null;
   }
-  function eraserCursor(p) {
-    const r = ink.eraser === 'part' ? ink.eraserSize : 12;
-    ctx.live.save(); ctx.live.strokeStyle = '#94a3b8'; ctx.live.lineWidth = 1.5 / css;
-    ctx.live.beginPath(); ctx.live.arc(p[0], p[1], r, 0, 7); ctx.live.stroke(); ctx.live.restore();
+  function eraserCursor(v, p) {
+    const r = ink.eraser === 'part' ? curSize('eraser') : 12, c = v.ctx.live;
+    c.save(); c.strokeStyle = '#94a3b8'; c.lineWidth = 1.5 / scale; c.beginPath(); c.arc(p[0], p[1], r, 0, 7); c.stroke(); c.restore();
   }
-  function eraseAt(p) {
-    const pg = page(), part = ink.eraser === 'part', r = part ? ink.eraserSize : 12;
+  function eraseAt(v, p) {
+    const pg = v.pg, part = ink.eraser === 'part', r = part ? curSize('eraser') : 12;
     let changed = false;
     const out = [];
     for (const s of pg.strokes) {
@@ -741,119 +840,153 @@ function renderNotebook(nb) {
       if (!strokeHit(s, p, reach)) { out.push(s); continue; }
       changed = true;
       if (!part) continue;
-      const pts = densify(s.pts, 3), runs = [];
-      let run = [];
-      for (const q of pts) { if (dist(q, p) < reach) { if (run.length > 1) runs.push(run); run = []; } else run.push(q); }
+      const runs = []; let run = [];
+      for (const q of densify(s.pts, 3)) { if (dist(q, p) < reach) { if (run.length > 1) runs.push(run); run = []; } else run.push(q); }
       if (run.length > 1) runs.push(run);
       for (const pts2 of runs) out.push({ ...s, pts: pts2 });
     }
-    if (changed) { pg.strokes = out; erasing.changed = true; redraw(); }
-    clearLive(); eraserCursor(p);
+    if (changed) { pg.strokes = out; erasing.changed = true; drawInk(v); }
+    clearLive(v); eraserCursor(v, p);
   }
   function runLaser() {
     if (laser.raf) return;
     const tick = () => {
-      const now = performance.now();
+      const now = performance.now(), v = laser.v;
       laser.pts = laser.pts.filter(q => now - q[2] < 700);
-      clearLive();
-      const c = ctx.live, P = laser.pts;
-      c.save(); c.lineCap = 'round'; c.lineJoin = 'round'; c.shadowColor = '#ff2d55'; c.shadowBlur = 14;
+      if (!v || !V.has(v.pg)) { laser.pts = []; laser.raf = 0; return; }
+      clearLive(v);
+      const c = v.ctx.live, P = laser.pts, s = Math.max(0.6, scale);
+      c.save(); c.lineCap = 'round'; c.lineJoin = 'round'; c.shadowColor = '#ff2d55'; c.shadowBlur = 12;
       for (let i = 1; i < P.length; i++) {
-        if (P[i][2] - P[i - 1][2] > 80) continue; // a new stroke
+        if (P[i][2] - P[i - 1][2] > 80) continue;
         const age = (now - P[i][2]) / 700;
-        c.globalAlpha = Math.max(0, 1 - age); c.strokeStyle = '#ff2d55'; c.lineWidth = (5 - age * 3) / Math.max(0.6, css);
+        c.globalAlpha = Math.max(0, 1 - age); c.strokeStyle = '#ff2d55'; c.lineWidth = (5 - age * 3) / s;
         c.beginPath(); c.moveTo(P[i - 1][0], P[i - 1][1]); c.lineTo(P[i][0], P[i][1]); c.stroke();
       }
-      if (P.length && mode === 'laser') { const l = P[P.length - 1]; c.globalAlpha = 1; c.fillStyle = '#ff2d55'; c.beginPath(); c.arc(l[0], l[1], 5 / Math.max(0.6, css), 0, 7); c.fill(); }
+      if (P.length && mode === 'laser') { const l = P[P.length - 1]; c.globalAlpha = 1; c.fillStyle = '#ff2d55'; c.beginPath(); c.arc(l[0], l[1], 5 / s, 0, 7); c.fill(); }
       c.restore();
       laser.raf = P.length || mode === 'laser' ? requestAnimationFrame(tick) : 0;
+      if (!laser.raf) act = null;
     };
     laser.raf = requestAnimationFrame(tick);
   }
 
   /* text boxes */
-  function addText(p) {
-    const it = { id: uid(), type: 'text', x: p[0], y: p[1] - ink.textSize * 0.8, w: 420, size: ink.textSize, color: ink.color, text: '' };
-    pushUndo(); page().items.push(it); renderItems();
-    const el = itemsBox.querySelector(`[data-item="${it.id}"]`);
-    el.focus();
+  function addText(v, p) {
+    const it = { id: uid(), type: 'text', x: p[0], y: p[1] - ink.textSize * 0.8, w: Math.min(440, pageW(v.pg) - p[0] - 20), size: ink.textSize, color: curColor('text'), text: '' };
+    pushUndo(v.pg); v.pg.items.push(it); renderItems(v);
+    v.items.querySelector(`[data-item="${it.id}"]`)?.focus();
   }
-  itemsBox.addEventListener('input', e => {
-    const el = e.target.closest('.ti'); const it = page().items.find(x => x.id === el?.dataset.item); if (!it) return;
-    it.text = el.innerText.replace(/\n$/, ''); save(); refreshThumb();
+  col.addEventListener('input', e => {
+    const el = e.target.closest('.ti'); if (!el) return;
+    const pg = nb.pages[+el.closest('.pg').dataset.i], it = pg?.items.find(x => x.id === el.dataset.item); if (!it) return;
+    it.text = el.innerText.replace(/\n$/, ''); save(); refreshThumb(pg);
   });
-  itemsBox.addEventListener('focusout', e => {
-    const el = e.target.closest('.ti'); const it = page().items.find(x => x.id === el?.dataset.item);
-    if (it && !it.text.trim()) { page().items = page().items.filter(x => x !== it); renderItems(); save(); }
+  col.addEventListener('focusout', e => {
+    const el = e.target.closest('.ti'); if (!el) return;
+    const pg = nb.pages[+el.closest('.pg').dataset.i], it = pg?.items.find(x => x.id === el.dataset.item);
+    if (it && !it.text.trim()) { pg.items = pg.items.filter(x => x !== it); repaintPg(pg); save(); }
   });
 
-  live.addEventListener('pointerdown', down);
-  live.addEventListener('pointermove', move);
-  live.addEventListener('pointerup', up);
-  live.addEventListener('pointercancel', e => { touches.delete(e.pointerId); if (!touches.size) { gesture = null; commitZoom(); } abortStroke(); });
-  live.addEventListener('pointerleave', () => { if (!mode && ink.tool === 'eraser') clearLive(); });
-  live.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+  col.addEventListener('pointerdown', down);
+  col.addEventListener('pointermove', move);
+  col.addEventListener('pointerup', up);
+  col.addEventListener('pointercancel', e => { touches.delete(e.pointerId); if (!touches.size && gesture) { gesture = null; commitZoom(); } abortStroke(); if (mode !== 'laser') act = null; });
+  col.addEventListener('pointerleave', () => { if (!mode && ink.tool === 'eraser') for (const v of V.values()) clearLive(v); });
 
   const onKey = e => {
     if (e.target.closest?.('input,textarea,select,[contenteditable="true"]') || $('#dlg').open) return;
     const k = e.key.toLowerCase();
     if ((e.metaKey || e.ctrlKey) && k === 'z') { e.preventDefault(); A[e.shiftKey ? 'ink-redo' : 'ink-undo'](); return; }
-    if ((e.metaKey || e.ctrlKey) && (k === '=' || k === '+' || k === '-' || k === '0')) { e.preventDefault(); A['ink-zoom']({ dataset: { z: k === '-' ? -1 : k === '0' ? 0 : 1 } }); return; }
+    if ((e.metaKey || e.ctrlKey) && ['=', '+', '-', '0'].includes(k)) { e.preventDefault(); zoomBy(k === '-' ? -1 : k === '0' ? 0 : 1); return; }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if ((k === 'backspace' || k === 'delete') && ink.sel) { e.preventDefault(); A['sel-del'](); return; }
-    if (k === 'escape' && ink.sel) { ink.sel = null; renderSel(); return; }
-    const tool = TOOLS.find(x => x[3].toLowerCase() === k);
-    if (tool) { ink.tool = tool[0]; ink.sel = null; renderSel(); bar(); keepInkPrefs(); }
-    if (k === 'arrowleft') goPage(ui.inkPage + 1);
-    if (k === 'arrowright') goPage(ui.inkPage - 1);
+    if (k === 'escape') { closePop(); if (ink.sel) { const v = V.get(ink.sel.pg); ink.sel = null; if (v) renderSel(v); } return; }
+    const tool = TOOLS.find(x => x[2].toLowerCase() === k);
+    if (tool) A['ink-tool']({ dataset: { tool: tool[0] } });
+    if (k === 'pagedown') { e.preventDefault(); scrollToPage(Math.min(nb.pages.length - 1, ui.inkPage + 1)); }
+    if (k === 'pageup') { e.preventDefault(); scrollToPage(Math.max(0, ui.inkPage - 1)); }
   };
   document.addEventListener('keydown', onKey);
-  const ro = new ResizeObserver(() => { if (!zoomPreview) layout(); });
-  ro.observe(stage);
-  inkApi = { nb, page, layout, redraw, renderItems, renderSel, bar, thumbs, goPage, pushUndo, restore, refreshThumb };
-  cleanup = () => { ro.disconnect(); thumbIO?.disconnect(); cancelAnimationFrame(laser.raf); document.removeEventListener('keydown', onKey); inkApi = null; ink.sel = null; };
-  bar(); thumbs();
+  let resizeTimer = null, lastW = 0;
+  const ro = new ResizeObserver(() => {
+    if (Math.abs(stage.clientWidth - lastW) < 2) return;
+    lastW = stage.clientWidth;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { const keep = ui.inkPage; computeScale(); sizeShells(); for (const v of V.values()) paint(v); scrollToPage(keep, false); }, 120);
+  });
+
+  inkApi = {
+    nb, curPg, buildShells, repaintPg, pushUndo, restore, bar, thumbs, scrollToPage, zoomBy, openPop, closePop, refreshThumb,
+    viewOf: pg => V.get(pg), renderSel, drawInk, renderItems,
+    rebuild(keep = ui.inkPage) { buildShells(); thumbs(); bar(); floatBar(); requestAnimationFrame(() => scrollToPage(Math.min(keep, nb.pages.length - 1), false)); },
+  };
+  cleanup = () => { ro.disconnect(); io?.disconnect(); thumbIO?.disconnect(); cancelAnimationFrame(laser.raf); document.removeEventListener('keydown', onKey); inkApi = null; ink.sel = null; };
+  bar(); floatBar(); thumbs();
+  requestAnimationFrame(() => { lastW = stage.clientWidth; buildShells(); ro.observe(stage); scrollToPage(ui.inkPage, false); });
 }
 
 /* ---------- page menus ---------- */
 function pageDialog(nb, i) {
-  const pg = nb.pages[i];
+  const pg = nb.pages[i], land = pageW(pg) > pageH(pg);
   openDialog(`<h3>الصفحة ${i + 1}</h3>
-    ${pg.pdfPage ? '<p class="note">صفحة من الكتاب</p>' : `<span class="note">قالب الورق</span>${templatePicker(pg.paper || nb.paper, pg.paperColor || nb.paperColor)}
-      <label class="check-row"><input type="checkbox" name="all"> طبّق القالب على كل صفحات الدفتر</label>`}
+    ${pg.pdfPage ? '<p class="note">صفحة من الكتاب</p>' : `${templatePicker(pg.paper || nb.paper, pg.paperColor || nb.paperColor)}
+      <div class="row wrap"><label>الاتجاه<span class="seg"><label><input type="radio" name="orient" value="p" ${land ? '' : 'checked'}><span class="o-p" title="عمودي"></span></label><label><input type="radio" name="orient" value="l" ${land ? 'checked' : ''}><span class="o-l" title="بالعرض"></span></label></span></label></div>
+      <label class="check-row"><input type="checkbox" name="all"> طبّق على كل صفحات الدفتر</label>`}
+    <span class="note">الصفحة</span>
     <div class="row wrap">
-      <button class="btn" value="dup" formnovalidate>تكرار الصفحة</button>
-      <button class="btn" value="up" formnovalidate ${i ? '' : 'disabled'}>↑ نقل قبل</button>
-      <button class="btn" value="down" formnovalidate ${i < nb.pages.length - 1 ? '' : 'disabled'}>↓ نقل بعد</button>
+      <button class="btn" value="dup" formnovalidate>تكرار</button>
+      <button class="btn" value="up" formnovalidate ${i ? '' : 'disabled'}>نقل قبل</button>
+      <button class="btn" value="down" formnovalidate ${i < nb.pages.length - 1 ? '' : 'disabled'}>نقل بعد</button>
       <button class="btn" value="clear" formnovalidate>مسح الكتابة</button>
     </div>
+    <span class="note">تصدير</span>
     <div class="row wrap">
-      <button class="btn" value="png" formnovalidate>حفظ كصورة</button>
-      ${desktop ? '<button class="btn" value="drive" formnovalidate>△ حفظ في درايف</button>' : ''}
-      <button class="btn" value="pdf" formnovalidate>تصدير الدفتر PDF</button>
+      <button class="btn" value="png" formnovalidate>الصفحة كصورة</button>
+      ${desktop ? '<button class="btn" value="drive" formnovalidate>الصفحة إلى قوقل درايف</button>' : ''}
+      <button class="btn" value="pdf" formnovalidate>الدفتر كامل PDF</button>
     </div>
+    <span class="note">الإصبع على الشاشة</span>
+    <div class="row wrap">${[['auto', 'تلقائي'], ['draw', 'يرسم'], ['pan', 'يحرّك الصفحة']].map(([k, n]) => `<button class="btn small ${ink.finger === k ? 'primary' : ''}" value="finger:${k}" formnovalidate>${n}</button>`).join('')}</div>
     <div class="dlg-actions">${pg.pdfPage ? '' : '<button class="btn primary" value="save">حفظ</button>'}<button class="btn" value="cancel" formnovalidate>إغلاق</button><span class="grow"></span><button class="btn danger" value="delete" formnovalidate ${nb.pages.length > 1 ? '' : 'disabled'}>حذف الصفحة</button></div>`, async (fd, v) => {
     const api = inkApi;
+    if (v.startsWith('finger:')) { ink.finger = v.slice(7); keepInkPrefs(); api?.bar(); return; }
     if (v === 'save') {
-      const patch = { paper: fd.get('paper'), paperColor: fd.get('paperColor') };
-      if (fd.get('all') === 'on') { Object.assign(nb, patch); nb.pages.forEach(p => { delete p.paper; delete p.paperColor; }); } else Object.assign(pg, patch);
+      const paper = fd.get('paper'), color = fd.get('paperColor'), toLand = fd.get('orient') === 'l';
+      const apply = p => {
+        if (p.pdfPage) return;
+        if (p.paper !== paper) p.tpl = tplInit(paper, p.tpl?.date);
+        p.paper = paper; p.paperColor = color;
+        if ((pageW(p) > pageH(p)) !== toLand) [p.w, p.h] = [pageH(p), pageW(p)];
+      };
+      if (fd.get('all') === 'on') { nb.paper = paper; nb.paperColor = color; nb.pages.forEach(apply); } else apply(pg);
     }
-    if (v === 'dup') { nb.pages.splice(i + 1, 0, { ...structuredClone(pg), id: uid(), mark: false }); ui.inkPage = i + 1; }
+    if (v === 'dup') nb.pages.splice(i + 1, 0, { ...structuredClone(pg), id: uid(), mark: false });
     if (v === 'up' || v === 'down') { const j = v === 'up' ? i - 1 : i + 1; [nb.pages[i], nb.pages[j]] = [nb.pages[j], nb.pages[i]]; ui.inkPage = j; }
-    if (v === 'clear') { api?.pushUndo(); pg.strokes = []; pg.items = []; }
-    if (v === 'delete') return void setTimeout(() => ask(`تحذف الصفحة ${i + 1}؟`, 'حذف', () => { nb.pages.splice(i, 1); ui.inkPage = Math.min(ui.inkPage, nb.pages.length - 1); save(); api?.goPage(ui.inkPage); }));
+    if (v === 'clear') { api?.pushUndo(pg); pg.strokes = []; pg.items = []; }
+    if (v === 'delete') return void setTimeout(() => ask(`تحذف الصفحة ${i + 1}؟`, 'حذف', () => { nb.pages.splice(i, 1); save(); api?.rebuild(Math.max(0, i - 1)); }));
     if (v === 'png' || v === 'drive') { const b = await pageBlob(nb, pg); return saveOut(`${nb.name}-${i + 1}.png`, new Uint8Array(await b.arrayBuffer()), v === 'drive'); }
     if (v === 'pdf') return exportPdf(nb);
     save();
-    if (api) { ink.undo = []; ink.redo = []; api.layout(); api.bar(); api.thumbs(); }
+    if (api) { if (v === 'clear') api.repaintPg(pg); else api.rebuild(v === 'dup' ? i + 1 : ui.inkPage); }
   });
 }
 
 /* ---------- actions ---------- */
-function setColor(c) {
-  if (ink.tool === 'hl') ink.hl = c; else ink.color = c;
-  keepInkPrefs(); inkApi?.bar();
+function insertImage() {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = async () => {
+    const f = inp.files[0], api = inkApi; if (!f || !api) return;
+    const pg = api.curPg(), key = await putBlob(f), bm = await createImageBitmap(f); imgCache.set(key, bm);
+    const w = Math.min(pageW(pg) * 0.6, bm.width), h = w * bm.height / bm.width;
+    const it = { id: uid(), type: 'image', blob: key, x: (pageW(pg) - w) / 2, y: Math.max(40, (pageH(pg) - h) / 2), w, h };
+    api.pushUndo(pg); pg.items.push(it);
+    ink.tool = 'lasso'; ink.sel = { pg, strokes: new Set(), items: new Set([it]), box: { x: it.x, y: it.y, w, h } };
+    save(); api.repaintPg(pg); api.bar(); api.refreshThumb(pg);
+  };
+  inp.click();
 }
+function selChanged(pg) { save(); inkApi.repaintPg(pg); inkApi.bar(); inkApi.refreshThumb(pg); }
 Object.assign(A, {
   'open-nb': a => { ui.notebookId = a.dataset.nb; ui.inkPage = 0; ink.undo = []; ink.redo = []; ink.zoom = 1; render(); },
   'new-nb': () => notebookDialog(null),
@@ -871,90 +1004,81 @@ Object.assign(A, {
     if (files.length) importBook(files);
   },
   'ink-back': () => { ui.notebookId = null; render(); },
-  'ink-tool': a => { ink.tool = a.dataset.tool; ink.sel = null; inkApi.renderSel(); inkApi.bar(); keepInkPrefs(); },
-  'ink-color': a => setColor(a.dataset.c),
-  'ink-size': a => { ink[a.dataset.k] = +a.dataset.s; keepInkPrefs(); inkApi.bar(); },
-  'eraser-mode': a => { ink.eraser = a.dataset.m; keepInkPrefs(); inkApi.bar(); },
-  'shape-kind': a => { ink.shape = a.dataset.s; keepInkPrefs(); inkApi.bar(); },
+  'ink-tool': a => {
+    const t = a.dataset.tool;
+    if (t === 'image') return insertImage();
+    if (ink.tool === t && a.closest) { inkApi.openPop(a); return; }
+    ink.tool = t; inkApi.closePop();
+    if (ink.sel) { const v = inkApi.viewOf(ink.sel.pg); ink.sel = null; if (v) inkApi.renderSel(v); }
+    inkApi.bar(); keepInkPrefs();
+  },
+  'ink-cslot': a => {
+    const k = toolKind(ink.tool), i = +a.dataset.i;
+    if (ink.colorIdx[k] !== i) { ink.colorIdx[k] = i; keepInkPrefs(); inkApi.bar(); return; }
+    const inp = document.createElement('input'); inp.type = 'color'; inp.value = ink.colors[k][i];
+    inp.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+    document.body.appendChild(inp);
+    inp.addEventListener('input', () => { ink.colors[k][i] = inp.value; keepInkPrefs(); inkApi?.bar(); });
+    inp.addEventListener('change', () => inp.remove());
+    inp.click();
+  },
+  'ink-sslot': a => { const k = ink.tool === 'shape' ? 'pen' : ink.tool; ink.sizeIdx[k] = +a.dataset.i; keepInkPrefs(); inkApi.bar(); },
+  'pen-style': a => { ink.penStyle = a.dataset.s; keepInkPrefs(); inkApi.closePop(); inkApi.bar(); },
+  'eraser-mode': a => { ink.eraser = a.dataset.m; keepInkPrefs(); inkApi.closePop(); inkApi.bar(); },
+  'erase-hl': () => { ink.eraseHlOnly = !ink.eraseHlOnly; keepInkPrefs(); inkApi.closePop(); inkApi.bar(); toast(ink.eraseHlOnly ? 'الممحاة تمسح التظليل فقط' : 'الممحاة تمسح كل شي'); },
+  'shape-kind': a => { ink.shape = a.dataset.s; keepInkPrefs(); inkApi.closePop(); inkApi.bar(); },
+  'text-size': a => { ink.textSize = +a.dataset.s; keepInkPrefs(); inkApi.closePop(); },
   'ink-undo': () => inkApi && inkApi.restore(ink.undo, ink.redo),
   'ink-redo': () => inkApi && inkApi.restore(ink.redo, ink.undo),
-  'ink-zoom': a => {
-    const z = +a.dataset.z;
-    ink.zoom = z === 0 ? 1 : Math.max(0.5, Math.min(5, ink.zoom * (z > 0 ? 1.25 : 0.8)));
-    keepInkPrefs(); inkApi?.layout(); inkApi?.bar();
-  },
-  'ink-finger': () => { ink.finger = { auto: 'draw', draw: 'pan', pan: 'auto' }[ink.finger]; keepInkPrefs(); inkApi.bar(); toast({ auto: 'الإصبع يرسم، وإذا استخدمت القلم يصير يحرّك الصفحة', draw: 'الإصبع يرسم دائمًا', pan: 'الإصبع يحرّك الصفحة فقط' }[ink.finger]); },
-  'ink-thumbs': () => { ink.thumbs = !ink.thumbs; keepInkPrefs(); inkApi.bar(); inkApi.thumbs(); inkApi.layout(); },
-  'ink-mark': () => { const pg = inkApi.page(); pg.mark = !pg.mark; save(); inkApi.bar(); inkApi.thumbs(); },
-  'ink-page': a => inkApi.goPage(ui.inkPage + +a.dataset.n),
-  'ink-goto': a => inkApi.goPage(+a.dataset.i),
+  'ink-zoom': a => inkApi?.zoomBy(+a.dataset.z),
+  'ink-thumbs': () => { ink.thumbs = !ink.thumbs; keepInkPrefs(); inkApi.bar(); inkApi.thumbs(); },
+  'marks-only': () => { ink.marksOnly = !ink.marksOnly; inkApi.thumbs(); },
+  'ink-mark': () => { const pg = inkApi.curPg(); pg.mark = !pg.mark; save(); inkApi.bar(); inkApi.thumbs(); },
+  'ink-goto': a => inkApi.scrollToPage(+a.dataset.i),
   'ink-add-page': () => {
-    const nb = inkApi.nb, cur = inkApi.page();
-    nb.pages.splice(ui.inkPage + 1, 0, { id: uid(), strokes: [], items: [], ...(cur.pdfPage ? {} : { paper: cur.paper, paperColor: cur.paperColor }) });
-    save(); inkApi.goPage(ui.inkPage + 1);
+    const nb = inkApi.nb, cur = inkApi.curPg(), i = ui.inkPage;
+    const pg = { id: uid(), strokes: [], items: [], w: pageW(cur), h: pageH(cur) };
+    if (!cur.pdfPage) Object.assign(pg, { paper: cur.paper, paperColor: cur.paperColor, tpl: tplNext(cur.paper || nb.paper, cur.tpl) });
+    nb.pages.splice(i + 1, 0, pg);
+    save(); inkApi.rebuild(i + 1);
   },
   'ink-more': () => pageDialog(inkApi.nb, ui.inkPage),
   'thumb-menu': a => pageDialog(inkApi.nb, +a.dataset.i),
-  'ink-image': () => {
-    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
-    inp.onchange = async () => {
-      const f = inp.files[0]; if (!f || !inkApi) return;
-      const key = await putBlob(f), bm = await createImageBitmap(f); imgCache.set(key, bm);
-      const w = Math.min(560, bm.width), h = w * bm.height / bm.width, H = pageH(inkApi.page());
-      const it = { id: uid(), type: 'image', blob: key, x: (PW - w) / 2, y: Math.max(40, (H - h) / 2), w, h };
-      inkApi.pushUndo(); inkApi.page().items.push(it);
-      ink.tool = 'lasso'; ink.sel = { strokes: new Set(), items: new Set([it]), box: { x: it.x, y: it.y, w, h } };
-      save(); inkApi.redraw(); inkApi.renderSel(); inkApi.bar(); inkApi.refreshThumb();
-    };
-    inp.click();
-  },
   'sel-del': () => {
     const s = ink.sel; if (!s || !inkApi) return;
-    const pg = inkApi.page(); inkApi.pushUndo();
+    const pg = s.pg; inkApi.pushUndo(pg);
     pg.strokes = pg.strokes.filter(x => !s.strokes.has(x)); pg.items = pg.items.filter(x => !s.items.has(x));
-    ink.sel = null; save(); inkApi.redraw(); inkApi.renderItems(); inkApi.renderSel(); inkApi.bar(); inkApi.refreshThumb();
+    ink.sel = null; selChanged(pg);
   },
-  'sel-cut': () => {
-    const s = ink.sel; if (!s) return;
-    ink.clip = { strokes: [...s.strokes], items: [...s.items] };
-    A['sel-del'](); toast('انقص. اضغط ⌘V للصق');
-  },
+  'sel-cut': () => { const s = ink.sel; if (!s) return; ink.clip = { strokes: [...s.strokes], items: [...s.items] }; A['sel-del'](); toast('انقص. اضغط ⌘V للصق'); },
   'sel-dup': () => {
     const s = ink.sel; if (!s || !inkApi) return;
-    const pg = inkApi.page(); inkApi.pushUndo();
-    const move = p => [p[0] + 30, p[1] + 30, p[2]];
-    const ns = [...s.strokes].map(x => ({ ...x, pts: x.pts.map(move) })), ni = [...s.items].map(x => ({ ...x, id: uid(), x: x.x + 30, y: x.y + 30 }));
+    const pg = s.pg; inkApi.pushUndo(pg);
+    const mv = p => [p[0] + 30, p[1] + 30, p[2]];
+    const ns = [...s.strokes].map(x => ({ ...x, pts: x.pts.map(mv) })), ni = [...s.items].map(x => ({ ...x, id: uid(), x: x.x + 30, y: x.y + 30 }));
     pg.strokes.push(...ns); pg.items.push(...ni);
-    ink.sel = { strokes: new Set(ns), items: new Set(ni), box: { ...s.box, x: s.box.x + 30, y: s.box.y + 30 } };
-    save(); inkApi.redraw(); inkApi.renderItems(); inkApi.renderSel(); inkApi.bar(); inkApi.refreshThumb();
+    ink.sel = { pg, strokes: new Set(ns), items: new Set(ni), box: { ...s.box, x: s.box.x + 30, y: s.box.y + 30 } };
+    selChanged(pg);
   },
   'sel-color': a => {
     const s = ink.sel; if (!s || !inkApi) return;
-    const pg = inkApi.page(), c = a.dataset.c; inkApi.pushUndo();
+    const pg = s.pg, c = a.dataset.c; inkApi.pushUndo(pg);
     const ns = new Set(), ni = new Set();
     pg.strokes = pg.strokes.map(x => { if (!s.strokes.has(x)) return x; const t = { ...x, color: c }; ns.add(t); return t; });
-    pg.items = pg.items.map(x => { if (!s.items.has(x) || x.type !== 'text') { if (s.items.has(x)) ni.add(x); return x; } const t = { ...x, color: c }; ni.add(t); return t; });
-    ink.sel = { strokes: ns, items: ni, box: s.box };
-    save(); inkApi.redraw(); inkApi.renderItems(); inkApi.renderSel(); inkApi.refreshThumb();
+    pg.items = pg.items.map(x => { if (!s.items.has(x)) return x; const t = x.type === 'text' ? { ...x, color: c } : x; ni.add(t); return t; });
+    ink.sel = { pg, strokes: ns, items: ni, box: s.box };
+    selChanged(pg);
   },
 });
 document.addEventListener('keydown', e => {
   if (!inkApi || !(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'v' || !ink.clip || e.target.closest?.('[contenteditable="true"],input,textarea')) return;
   e.preventDefault();
-  const pg = inkApi.page(); inkApi.pushUndo();
+  const pg = inkApi.curPg(); inkApi.pushUndo(pg);
   const ns = ink.clip.strokes.map(x => ({ ...x })), ni = ink.clip.items.map(x => ({ ...x, id: uid() }));
   pg.strokes.push(...ns); pg.items.push(...ni);
-  ink.tool = 'lasso'; ink.sel = { strokes: new Set(ns), items: new Set(ni), box: null };
+  ink.tool = 'lasso';
   const all = [...ns.flatMap(s => s.pts), ...ni.map(i => [i.x, i.y]), ...ni.map(i => [i.x + i.w, i.y + (i.h || i.size)])];
   const xs = all.map(p => p[0]), ys = all.map(p => p[1]);
-  ink.sel.box = { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
-  save(); inkApi.redraw(); inkApi.renderItems(); inkApi.renderSel(); inkApi.bar();
-});
-document.addEventListener('change', e => {
-  const k = e.target.dataset.change;
-  if (k === 'ink-color') setColor(e.target.value);
-  else if (k === 'pen-style') { ink.penStyle = e.target.value; keepInkPrefs(); }
-  else if (k === 'erase-hl') { ink.eraseHlOnly = e.target.checked; keepInkPrefs(); }
-  else if (k === 'text-size') { ink.textSize = +e.target.value; keepInkPrefs(); }
-  else if (k === 'marks-only') { ink.marksOnly = e.target.checked; inkApi?.thumbs(); }
+  ink.sel = { pg, strokes: new Set(ns), items: new Set(ni), box: { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) } };
+  selChanged(pg);
 });
