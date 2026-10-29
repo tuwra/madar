@@ -52,7 +52,7 @@
 ## التثبيت
 
 ### ماك
-1. نزّل ملف `.dmg` من صفحة [Releases](https://github.com/tuwra/madar/releases): `arm64` لأجهزة Apple Silicon (M1 وأحدث)، و`x64` لأجهزة Intel
+1. نزّل ملف `.dmg` من صفحة [Releases](https://github.com/tuwra/madar/releases). النسخة لأجهزة Apple Silicon (M1 وأحدث)
 2. افتحه واسحب **Madar** لمجلد التطبيقات
 3. التطبيق مو موقّع من Apple، فأول مرة: كليك يمين على التطبيق ← **فتح** ← **فتح**. أو شغّل هذا في الطرفية:
 
@@ -78,7 +78,7 @@ npm run dist       # يبني ملف dmg في مجلد dist
 npm run dist:win   # يبني مثبّت ويندوز
 ```
 
-الكود كله JavaScript عادي بدون أدوات بناء: الواجهة في `src/`، وتطبيق Electron في `electron/`. لما ترفع وسم مثل `v1.0.0`، يبني GitHub Actions ملفات dmg لأجهزة Apple Silicon وIntel ويرفقها بالإصدار.
+الكود كله JavaScript عادي بدون أدوات بناء: الواجهة في `src/`، وتطبيق Electron في `electron/`. لما تنشر إصدار جديد، يبني GitHub Actions ملف dmg لأجهزة Apple Silicon ومثبّت ويندوز، ويرفقهم بالإصدار.
 
 ## الرخصة
 

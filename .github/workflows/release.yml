@@ -29,8 +29,7 @@ jobs:
       - run: npm ci
       # Spotlight indexing keeps the dmg volume busy on GitHub's Mac runners
       - run: sudo mdutil -a -i off || true
-      # one architecture at a time: building both at once makes hdiutil fail
-      - run: npx electron-builder --mac dmg --x64 --publish never
+      # Apple Silicon only
       - run: npx electron-builder --mac dmg --arm64 --publish never
       - run: gh release upload "$TAG" dist/*.dmg --clobber
 
