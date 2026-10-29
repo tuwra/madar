@@ -519,7 +519,7 @@ dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 40px); 
 
 /* ===== v4: sharp zoom, pen panel, hand tool ===== */
 .pg { isolation: isolate; overflow: hidden; }
-.pg canvas.c-bg, .pg canvas.c-ink, .pg canvas.c-live { inset: auto; }
+.pg canvas.c-bg, .pg canvas.c-hl, .pg canvas.c-ink, .pg canvas.c-live { inset: auto; }
 .pg canvas.c-base { inset: 0; width: 100%; height: 100%; }
 .ink.tool-hand .pages-col, .ink.space-hand .pages-col { cursor: grab; }
 .ink.grabbing .pages-col, .ink.grabbing .c-live { cursor: grabbing !important; }

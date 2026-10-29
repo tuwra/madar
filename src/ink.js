@@ -7,10 +7,10 @@ const TOOLS = [['hand', 'يد: للقراءة والتنقل بدون كتابة
 
 const ink = {
   tool: 'pen', penStyle: 'fountain',
-  colors: { pen: ['#1f2937', '#2563eb', '#dc2626'], hl: ['#ffe03d', '#78e08a', '#7cb6ff'] },
+  colors: { pen: ['#111111', '#1d4ed8', '#dc2626'], hl: ['#ffe03d', '#78e08a', '#7cb6ff'] },
   colorIdx: { pen: 0, hl: 0 },
   sizes: { pen: [1.5, 3, 5.5], hl: [3, 4.5, 7], eraser: [8, 18, 36] }, sizeIdx: { pen: 1, hl: 1, eraser: 1 },
-  penOpts: { fountain: { thin: 0.6, sharp: 0.3, stab: 0.5 }, ball: { thin: 0.12, sharp: 0, stab: 0.5 }, brush: { thin: 0.85, sharp: 0.75, stab: 0.55 } },
+  penOpts: { fountain: { thin: 0.45, sharp: 0.2, stab: 0.5 }, ball: { thin: 0.12, sharp: 0, stab: 0.5 }, brush: { thin: 0.85, sharp: 0.75, stab: 0.55 } },
   hlOpts: { alpha: 0.5, tip: 'chisel', straight: false },
   eraser: 'stroke', eraseHlOnly: false, shape: 'rect', textSize: 28,
   zoom: 1, finger: 'auto', thumbs: false, marksOnly: false,
@@ -20,6 +20,8 @@ try {
   const saved = JSON.parse(localStorage.getItem('madar-ink2') || '{}');
   for (const k of ['tool', 'penStyle', 'penOpts', 'hlOpts', 'colors', 'colorIdx', 'sizes', 'sizeIdx', 'eraser', 'eraseHlOnly', 'shape', 'textSize', 'finger', 'thumbs']) if (saved[k] !== undefined) ink[k] = saved[k];
   if (ink.tool === 'image') ink.tool = 'pen';
+  if (ink.colors?.pen?.[0] === '#1f2937') ink.colors.pen[0] = '#111111';
+  const f = ink.penOpts?.fountain; if (f && f.thin === 0.6 && f.sharp === 0.3) Object.assign(f, { thin: 0.45, sharp: 0.2 });
 } catch { /* ignore */ }
 const keepInkPrefs = () => { try { const { undo, redo, sel, clip, ...prefs } = ink; localStorage.setItem('madar-ink2', JSON.stringify(prefs)); } catch { /* ignore */ } };
 const toolKind = t => (t === 'shape' || t === 'text') ? 'pen' : t;
@@ -96,7 +98,7 @@ function pageImage(key, onLoad) {
 /* ---------- strokes: each one is filled as a single smooth outline ---------- */
 // thin: how much pressure (or speed, with a mouse) changes the width; sharp: how much the ends taper;
 // stab: how much the line is smoothed out
-const PEN_DEFAULTS = { fountain: { thin: 0.6, sharp: 0.3, stab: 0.5 }, ball: { thin: 0.12, sharp: 0, stab: 0.5 }, brush: { thin: 0.85, sharp: 0.75, stab: 0.55 } };
+const PEN_DEFAULTS = { fountain: { thin: 0.45, sharp: 0.2, stab: 0.5 }, ball: { thin: 0.12, sharp: 0, stab: 0.5 }, brush: { thin: 0.85, sharp: 0.75, stab: 0.55 } };
 const HL_DEFAULTS = { alpha: 0.5, tip: 'chisel', straight: false };
 const pathCache = new WeakMap();
 function streamline(raw, amount, minGap = 0.35) {
@@ -514,11 +516,11 @@ function renderNotebook(nb) {
   function mount(i) {
     const pg = nb.pages[i]; if (!pg || V.has(pg)) return;
     const el = shells[i];
-    el.innerHTML = '<canvas class="c-base"></canvas><canvas class="c-bg"></canvas><canvas class="c-ink"></canvas><canvas class="c-live"></canvas><div class="ink-items"></div><div class="sel-layer"></div>';
-    const [base, bg, inkC, live] = el.querySelectorAll('canvas');
-    const v = { pg, el, cv: { base, bg, ink: inkC, live }, ctx: { base: base.getContext('2d'), bg: bg.getContext('2d'), ink: inkC.getContext('2d'), live: live.getContext('2d') }, items: el.querySelector('.ink-items'), selL: el.querySelector('.sel-layer'), tok: 0 };
-    const blend = isDark(pg.paperColor || nb.paperColor) ? 'normal' : 'multiply';
-    inkC.style.mixBlendMode = blend; live.style.mixBlendMode = blend;
+    el.innerHTML = '<canvas class="c-base"></canvas><canvas class="c-bg"></canvas><canvas class="c-hl"></canvas><canvas class="c-ink"></canvas><canvas class="c-live"></canvas><div class="ink-items"></div><div class="sel-layer"></div>';
+    const [base, bg, hlC, inkC, live] = el.querySelectorAll('canvas');
+    const v = { pg, el, cv: { base, bg, hl: hlC, ink: inkC, live }, ctx: { base: base.getContext('2d'), bg: bg.getContext('2d'), hl: hlC.getContext('2d'), ink: inkC.getContext('2d'), live: live.getContext('2d') }, items: el.querySelector('.ink-items'), selL: el.querySelector('.sel-layer'), tok: 0 };
+    // only the highlighter blends with the paper (so text under it stays crisp); pen ink is solid and covers the lines
+    hlC.style.mixBlendMode = isDark(pg.paperColor || nb.paperColor) ? 'normal' : 'multiply';
     V.set(pg, v); paintBase(v); paint(v);
   }
   function unmount(i) {
@@ -550,7 +552,7 @@ function renderNotebook(nb) {
     if (R.w * R.h * res * res > 14e6) res = Math.sqrt(14e6 / (R.w * R.h));
     v.res = res;
     const css = `left:${R.x * scale}px;top:${R.y * scale}px;width:${R.w * scale}px;height:${R.h * scale}px`;
-    for (const k of ['bg', 'ink', 'live']) {
+    for (const k of ['bg', 'hl', 'ink', 'live']) {
       const c = v.cv[k];
       c.width = Math.max(1, Math.round(R.w * res)); c.height = Math.max(1, Math.round(R.h * res));
       c.style.left = R.x * scale + 'px'; c.style.top = R.y * scale + 'px'; c.style.width = R.w * scale + 'px'; c.style.height = R.h * scale + 'px';
@@ -573,11 +575,11 @@ function renderNotebook(nb) {
   }
   const wipe = c => { c.save(); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, c.canvas.width, c.canvas.height); c.restore(); };
   function drawInk(v, skip) {
-    const c = v.ctx.ink;
-    wipe(c);
-    for (const it of v.pg.items) if (it.type === 'image' && !skip?.has(it)) drawImageItem(c, it, () => drawInk(v, skip));
+    const h = v.ctx.hl, c = v.ctx.ink;
+    wipe(h); wipe(c);
+    for (const it of v.pg.items) if (it.type === 'image' && !skip?.has(it)) drawImageItem(h, it, () => drawInk(v, skip));
     // highlighter goes under the ink, like on paper
-    for (const s of v.pg.strokes) if (s.tool === 'hl' && !skip?.has(s)) drawStroke(c, s);
+    for (const s of v.pg.strokes) if (s.tool === 'hl' && !skip?.has(s)) drawStroke(h, s);
     for (const s of v.pg.strokes) if (s.tool !== 'hl' && !skip?.has(s)) drawStroke(c, s);
   }
   function renderItems(v) {
@@ -1020,7 +1022,7 @@ function renderNotebook(nb) {
     const m = mode, v = act; mode = null;
     if (!v) return;
     if (m === 'pen' || m === 'hl' || m === 'shape') {
-      if (cur && !(m === 'shape' && cur.pts.length < 2)) { pushUndo(v.pg); v.pg.strokes.push(cur); drawStroke(v.ctx.ink, cur); save(); bar(); refreshThumb(v.pg); }
+      if (cur && !(m === 'shape' && cur.pts.length < 2)) { pushUndo(v.pg); v.pg.strokes.push(cur); drawStroke(cur.tool === 'hl' ? v.ctx.hl : v.ctx.ink, cur); save(); bar(); refreshThumb(v.pg); }
       cur = null; clearLive(v);
     } else if (m === 'eraser') {
       if (erasing?.changed) { pushUndo(erasing.before); save(); bar(); refreshThumb(v.pg); }
