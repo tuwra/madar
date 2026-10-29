@@ -33,6 +33,7 @@ function migrate(st) {
   }
   if (!state) { state = seed(); flush(); }
   migrate(state);
+  loadInkPrefs(state);
   if (addOnboarding(state)) flush();
   render();
 })();

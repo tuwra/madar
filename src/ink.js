@@ -12,18 +12,28 @@ const ink = {
   sizes: { pen: [1.5, 3, 5.5], hl: [3, 4.5, 7], eraser: [8, 18, 36] }, sizeIdx: { pen: 1, hl: 1, eraser: 1 },
   penOpts: { fountain: { thin: 0.45, sharp: 0.2, stab: 0.5 }, ball: { thin: 0.12, sharp: 0, stab: 0.5 }, brush: { thin: 0.85, sharp: 0.75, stab: 0.55 } },
   hlOpts: { alpha: 0.5, tip: 'chisel', straight: false },
-  eraser: 'stroke', eraseHlOnly: false, shape: 'rect', textSize: 28,
+  eraser: 'stroke', eraseHlOnly: false, shape: 'rect', textSize: 28, laserMode: 'trail', recentColors: [],
   zoom: 1, finger: 'auto', thumbs: false, marksOnly: false,
   undo: [], redo: [], penSeen: false, sel: null,
 };
-try {
-  const saved = JSON.parse(localStorage.getItem('madar-ink2') || '{}');
-  for (const k of ['tool', 'penStyle', 'penOpts', 'hlOpts', 'colors', 'colorIdx', 'sizes', 'sizeIdx', 'eraser', 'eraseHlOnly', 'shape', 'textSize', 'finger', 'thumbs']) if (saved[k] !== undefined) ink[k] = saved[k];
+const INK_PREF_KEYS = ['tool', 'penStyle', 'penOpts', 'hlOpts', 'colors', 'colorIdx', 'sizes', 'sizeIdx', 'eraser', 'eraseHlOnly', 'shape', 'textSize', 'finger', 'thumbs', 'laserMode', 'recentColors'];
+function applyInkPrefs(saved) {
+  if (!saved) return;
+  for (const k of INK_PREF_KEYS) if (saved[k] !== undefined) ink[k] = structuredClone(saved[k]);
   if (ink.tool === 'image') ink.tool = 'pen';
   if (ink.colors?.pen?.[0] === '#1f2937') ink.colors.pen[0] = '#111111';
   const f = ink.penOpts?.fountain; if (f && f.thin === 0.6 && f.sharp === 0.3) Object.assign(f, { thin: 0.45, sharp: 0.2 });
-} catch { /* ignore */ }
-const keepInkPrefs = () => { try { const { undo, redo, sel, clip, ...prefs } = ink; localStorage.setItem('madar-ink2', JSON.stringify(prefs)); } catch { /* ignore */ } };
+}
+try { applyInkPrefs(JSON.parse(localStorage.getItem('madar-ink2') || 'null')); } catch { /* ignore */ }
+// called by boot once the saved data is loaded: those settings win over browser storage
+function loadInkPrefs(st) { if (st?.prefs?.ink) applyInkPrefs(st.prefs.ink); }
+function keepInkPrefs() {
+  const prefs = {};
+  for (const k of INK_PREF_KEYS) if (ink[k] !== undefined) prefs[k] = structuredClone(ink[k]);
+  try { localStorage.setItem('madar-ink2', JSON.stringify(prefs)); } catch { /* ignore */ }
+  if (typeof state !== 'undefined' && state) { state.prefs = { ...(state.prefs || {}), ink: prefs }; save(); }
+}
+const dotPx = (k, s) => Math.round(Math.min(24, Math.max(3, k === 'eraser' ? 4 + s * 0.45 : k === 'hl' ? 3 + s * 1.6 : 2 + s * 1.7)));
 const toolKind = t => (t === 'shape' || t === 'text') ? 'pen' : t;
 const curColor = (t = ink.tool) => { const k = toolKind(t); return ink.colors[k]?.[ink.colorIdx[k]] ?? '#1f2937'; };
 const curSize = (t = ink.tool) => { const k = toolKind(t); return ink.sizes[k]?.[ink.sizeIdx[k]] ?? 3; };
@@ -40,6 +50,8 @@ const ICON = {
   text: '<path d="M5 7V5h14v2"/><path d="M12 5v14"/><path d="M9 19h6"/>',
   image: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="9.5" r="1.7"/><path d="M20.5 15.5l-4.5-4.5-9 8.5"/>',
   laser: '<circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="6.5" opacity=".45"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2" opacity=".45"/>',
+  laserDot: '<circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="8" opacity=".35"/>',
+  laserTrail: '<path d="M3.5 17c3-6 6 2 9-4s4-6 7-5"/><circle cx="19.5" cy="8" r="2" fill="currentColor" stroke="none"/>',
   undo: '<path d="M9.5 14.5L5 10l4.5-4.5"/><path d="M5 10h9.5a4.5 4.5 0 0 1 0 9H12"/>',
   redo: '<path d="M14.5 14.5L19 10l-4.5-4.5"/><path d="M19 10H9.5a4.5 4.5 0 0 0 0 9H12"/>',
   pages: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>',
@@ -750,7 +762,7 @@ function renderNotebook(nb) {
     }
     const sk = t === 'shape' ? 'pen' : t;
     if (['pen', 'hl', 'shape'].includes(t) || (t === 'eraser' && ink.eraser === 'part')) {
-      opts += (opts ? '<span class="tb-sep"></span>' : '') + ink.sizes[sk].map((s, i) => `<button class="sslot ${i === ink.sizeIdx[sk] ? 'on' : ''}" data-act="ink-sslot" data-i="${i}" title="السماكة"><span style="width:${5 + i * 4}px;height:${5 + i * 4}px"></span></button>`).join('');
+      opts += (opts ? '<span class="tb-sep"></span>' : '') + ink.sizes[sk].map((s, i) => { const d = dotPx(sk, s); return `<button class="sslot ${i === ink.sizeIdx[sk] ? 'on' : ''}" data-act="ink-sslot" data-i="${i}" title="${i === ink.sizeIdx[sk] ? 'اضغط مرة ثانية عشان تعدّل هذا الحجم' : 'السماكة'}"><span style="width:${d}px;height:${d}px"></span></button>`; }).join('');
     }
     const pg = curPg();
     $('.ink-bar').innerHTML = `
@@ -814,6 +826,7 @@ function renderNotebook(nb) {
     if (t === 'eraser') html = `<button class="tb ${ink.eraser === 'stroke' ? 'on' : ''}" data-act="eraser-mode" data-m="stroke" title="يمسح الخط كامل">${ic('eraseStroke')}</button><button class="tb ${ink.eraser === 'part' ? 'on' : ''}" data-act="eraser-mode" data-m="part" title="يمسح الجزء اللي تمر عليه">${ic('erasePart')}</button><span class="tb-sep"></span><button class="tb ${ink.eraseHlOnly ? 'on' : ''}" data-act="erase-hl" title="يمسح التظليل فقط">${ic('eraseHl')}</button>`;
     if (t === 'shape') html = Object.entries(SHAPES).map(([k, n]) => `<button class="tb ${ink.shape === k ? 'on' : ''}" data-act="shape-kind" data-s="${k}" title="${n}">${ic(k)}</button>`).join('');
     if (t === 'text') html = [[20, 14], [28, 17], [40, 21], [60, 26]].map(([v, px]) => `<button class="tb ${ink.textSize === v ? 'on' : ''}" data-act="text-size" data-s="${v}" title="حجم الخط"><span style="font-size:${px}px;font-weight:600">ع</span></button>`).join('');
+    if (t === 'laser') html = `<button class="tb ${ink.laserMode === 'dot' ? 'on' : ''}" data-act="laser-mode" data-m="dot" title="نقطة">${ic('laserDot')}</button><button class="tb ${ink.laserMode !== 'dot' ? 'on' : ''}" data-act="laser-mode" data-m="trail" title="أثر يختفي">${ic('laserTrail')}</button>`;
     if (!html) return;
     pop.innerHTML = html; pop.hidden = false;
     pop.dataset.anchor = btn ? 'tool' : pop.dataset.anchor;
@@ -836,6 +849,57 @@ function renderNotebook(nb) {
     if (out) out.textContent = ['size', 'hsize'].includes(k) ? val.toFixed(1) : val + '%';
     keepInkPrefs(); drawPreview(); bar();
   });
+  function showPop(btn, html) {
+    pop.innerHTML = html; pop.hidden = false;
+    const r = btn.getBoundingClientRect(), rr = root.getBoundingClientRect();
+    pop.style.top = (r.bottom - rr.top + 6) + 'px';
+    pop.style.left = Math.min(rr.width - pop.offsetWidth - 8, Math.max(8, r.left - rr.left + r.width / 2 - pop.offsetWidth / 2)) + 'px';
+  }
+  const SIZE_RANGE = { pen: [0.4, 14, 0.1], hl: [1, 12, 0.1], eraser: [4, 60, 1] };
+  function openSizePop(btn, k, i) {
+    const [min, max, step] = SIZE_RANGE[k], val = ink.sizes[k][i];
+    pop.dataset.slot = `${k}:${i}`; pop.dataset.kind = 'size';
+    showPop(btn, `<div class="pp sz-pop"><div class="sz-prev"><span style="width:${dotPx(k, val) * 2}px;height:${dotPx(k, val) * 2}px;background:${k === 'eraser' ? 'transparent' : curColor(k === 'hl' ? 'hl' : 'pen')}"></span></div>
+      <label class="pp-row"><span>الحجم ${i + 1}</span><input type="range" data-sz min="${min}" max="${max}" step="${step}" value="${val}"><output>${(+val).toFixed(step < 1 ? 1 : 0)}</output></label></div>`);
+  }
+  const PALETTE = [
+    '#000000', '#3a3a3c', '#636366', '#8e8e93', '#c7c7cc', '#e5e5ea', '#ffffff',
+    '#7f1d1d', '#b91c1c', '#dc2626', '#ef4444', '#f87171', '#fca5a5', '#fecaca',
+    '#9a3412', '#ea580c', '#f97316', '#f59e0b', '#facc15', '#ffe03d', '#fef08a',
+    '#14532d', '#15803d', '#16a34a', '#22c55e', '#4ade80', '#78e08a', '#bbf7d0',
+    '#0c4a6e', '#0369a1', '#0ea5e9', '#38bdf8', '#7dd3fc', '#7cb6ff', '#bae6fd',
+    '#1e3a8a', '#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe',
+    '#4c1d95', '#6d28d9', '#8b5cf6', '#a78bfa', '#c4b5fd', '#ddd6fe', '#ede9fe',
+    '#831843', '#be185d', '#db2777', '#ec4899', '#f472b6', '#f9a8d4', '#fbcfe8',
+  ];
+  function openColorPop(btn, k, i) {
+    const cur = ink.colors[k][i];
+    pop.dataset.slot = `${k}:${i}`; pop.dataset.kind = 'color';
+    const sw = c => `<button class="cp-sw ${c.toLowerCase() === cur.toLowerCase() ? 'on' : ''}" style="--c:${c}" data-act="cp-pick" data-c="${c}" aria-label="${c}"></button>`;
+    showPop(btn, `<div class="cp">
+      <div class="cp-grid">${PALETTE.map(sw).join('')}</div>
+      ${ink.recentColors?.length ? `<div class="cp-label">الأخيرة</div><div class="cp-grid">${ink.recentColors.map(sw).join('')}</div>` : ''}
+      <label class="cp-hex"><i style="--c:${cur}"></i><span dir="ltr">#</span><input data-cp-hex dir="ltr" maxlength="6" spellcheck="false" autocomplete="off" value="${cur.replace('#', '')}"></label>
+    </div>`);
+  }
+  pop.addEventListener('input', e => {
+    const [k, i] = (pop.dataset.slot || '').split(':');
+    if (e.target.matches('[data-sz]')) {
+      const v = +e.target.value; ink.sizes[k][+i] = v;
+      e.target.parentElement.querySelector('output').textContent = v.toFixed(SIZE_RANGE[k][2] < 1 ? 1 : 0);
+      const d = dotPx(k, v) * 2, dot = pop.querySelector('.sz-prev span'); dot.style.width = dot.style.height = d + 'px';
+      keepInkPrefs(); bar();
+    }
+    if (e.target.matches('[data-cp-hex]')) {
+      const h = e.target.value.replace(/[^0-9a-f]/gi, '');
+      if (h.length === 6) { setSlotColor(k, +i, '#' + h); pop.querySelector('.cp-hex i').style.setProperty('--c', '#' + h); }
+    }
+  });
+  function setSlotColor(k, i, c) {
+    ink.colors[k][i] = c;
+    ink.recentColors = [c, ...(ink.recentColors || []).filter(x => x.toLowerCase() !== c.toLowerCase())].slice(0, 7);
+    keepInkPrefs(); bar();
+  }
   const closePop = () => { pop.hidden = true; };
   root.addEventListener('pointerdown', e => { if (!pop.hidden && !e.target.closest('.ink-pop') && !e.target.closest('[data-act="ink-tool"]')) closePop(); }, true);
 
@@ -894,7 +958,7 @@ function renderNotebook(nb) {
   }
   let spaceHand = false;
   let act = null, cur = null, mode = null, gesture = null, lasso = null, start = null, erasing = null, holdTimer = null, holdAnchor = null, selDrag = null;
-  const laser = { pts: [], raf: 0, v: null };
+  const laser = { strokes: [], cur: null, raf: 0, v: null, dot: null };
 
   function abortStroke() { if (act) clearLive(act); cur = null; mode = null; lasso = null; clearTimeout(holdTimer); }
   function down(e) {
@@ -941,7 +1005,12 @@ function renderNotebook(nb) {
     else if (t === 'lasso') lasso = [p];
     else if (t === 'shape') { start = p; cur = { tool: 'pen', style: 'ball', color: curColor(), size: curSize(), shape: ink.shape, pts: [p] }; }
     else if (t === 'text') { addText(v, p); mode = null; }
-    else if (t === 'laser') { laser.v = v; laser.pts.push([p[0], p[1], performance.now()]); runLaser(); }
+    else if (t === 'laser') {
+      laser.v = v;
+      if (ink.laserMode === 'dot') laser.dot = { p, end: 0 };
+      else { laser.cur = { pts: [p], end: 0 }; laser.strokes.push(laser.cur); }
+      runLaser();
+    }
   }
   function armHold() {
     clearTimeout(holdTimer);
@@ -997,7 +1066,10 @@ function renderNotebook(nb) {
       const c = v.ctx.live; c.save(); c.setLineDash([8 / scale, 6 / scale]); c.strokeStyle = '#4f46e5'; c.lineWidth = 1.5 / scale; c.fillStyle = 'rgba(79,70,229,.06)';
       c.beginPath(); c.moveTo(lasso[0][0], lasso[0][1]); for (const q of lasso) c.lineTo(q[0], q[1]); c.closePath(); c.fill(); c.stroke(); c.restore();
     } else if (mode === 'shape') { cur.pts = shapePts(ink.shape, start, p); clearLive(v); drawStroke(v.ctx.live, cur, true); }
-    else if (mode === 'laser') for (const ev of evs) { const q = pt(ev, v); laser.pts.push([q[0], q[1], performance.now()]); }
+    else if (mode === 'laser') {
+      if (laser.dot) laser.dot.p = p;
+      else if (laser.cur) for (const ev of evs) laser.cur.pts.push(pt(ev, v));
+    }
     else if (mode === 'sel-move') previewSel(v, p[0] - selDrag.p[0], p[1] - selDrag.p[1], 1);
     else if (mode === 'sel-scale') { const b = ink.sel.box; selDrag.k = Math.max(0.1, Math.max((p[0] - b.x) / b.w, (p[1] - b.y) / b.h)); previewSel(v, 0, 0, selDrag.k); }
   }
@@ -1034,7 +1106,7 @@ function renderNotebook(nb) {
       if (m === 'sel-move') transformSel(p[0] - selDrag.p[0], p[1] - selDrag.p[1], 1); else transformSel(0, 0, selDrag.k || 1);
       selDrag = null; clearLive(v); drawInk(v); renderItems(v); renderSel(v); save(); bar(); refreshThumb(v.pg);
     }
-    if (m !== 'laser') act = null;
+    if (m === 'laser') laserUp(); else act = null;
   }
   let liveFrom = 0, liveRaf = 0;
   function drawLive(v) {
@@ -1079,25 +1151,42 @@ function renderNotebook(nb) {
     if (changed) { pg.strokes = out; erasing.changed = true; drawInk(v); }
     clearLive(v); eraserCursor(v, p);
   }
+  const LASER = { hold: 550, fade: 450 };
+  function laserUp() {
+    const now = performance.now();
+    if (laser.cur) { laser.cur.end = now; laser.cur = null; }
+    if (laser.dot) laser.dot.end = now;
+  }
   function runLaser() {
     if (laser.raf) return;
     const tick = () => {
       const now = performance.now(), v = laser.v;
-      laser.pts = laser.pts.filter(q => now - q[2] < 700);
-      if (!v || !V.has(v.pg)) { laser.pts = []; laser.raf = 0; return; }
+      if (!v || !V.has(v.pg)) { laser.strokes = []; laser.dot = null; laser.raf = 0; return; }
+      const alphaOf = end => !end ? 1 : Math.max(0, 1 - (now - end - LASER.hold) / LASER.fade);
+      laser.strokes = laser.strokes.filter(st => alphaOf(st.end) > 0);
+      if (laser.dot && laser.dot.end && now - laser.dot.end > 250) laser.dot = null;
       clearLive(v);
-      const c = v.ctx.live, P = laser.pts, s = Math.max(0.6, scale);
-      c.save(); c.lineCap = 'round'; c.lineJoin = 'round'; c.shadowColor = '#ff2d55'; c.shadowBlur = 12;
-      for (let i = 1; i < P.length; i++) {
-        if (P[i][2] - P[i - 1][2] > 80) continue;
-        const age = (now - P[i][2]) / 700;
-        c.globalAlpha = Math.max(0, 1 - age); c.strokeStyle = '#ff2d55'; c.lineWidth = (5 - age * 3) / s;
-        c.beginPath(); c.moveTo(P[i - 1][0], P[i - 1][1]); c.lineTo(P[i][0], P[i][1]); c.stroke();
+      const c = v.ctx.live, s = Math.max(0.5, scale);
+      c.save(); c.lineCap = 'round'; c.lineJoin = 'round';
+      for (const st of laser.strokes) {
+        const a = alphaOf(st.end), P = st.pts;
+        const path = new Path2D(); path.moveTo(P[0][0], P[0][1]);
+        for (let i = 1; i < P.length - 1; i++) path.quadraticCurveTo(P[i][0], P[i][1], (P[i][0] + P[i + 1][0]) / 2, (P[i][1] + P[i + 1][1]) / 2);
+        if (P.length > 1) path.lineTo(P[P.length - 1][0], P[P.length - 1][1]); else path.lineTo(P[0][0] + 0.01, P[0][1]);
+        c.globalAlpha = a * 0.28; c.strokeStyle = '#ff2d55'; c.lineWidth = 16 / s; c.stroke(path);
+        c.globalAlpha = a; c.lineWidth = 6 / s; c.stroke(path);
+        c.globalAlpha = a * 0.95; c.strokeStyle = '#fff5f6'; c.lineWidth = 2.2 / s; c.stroke(path);
       }
-      if (P.length && mode === 'laser') { const l = P[P.length - 1]; c.globalAlpha = 1; c.fillStyle = '#ff2d55'; c.beginPath(); c.arc(l[0], l[1], 5 / s, 0, 7); c.fill(); }
+      if (laser.dot) {
+        const [x, y] = laser.dot.p, a = laser.dot.end ? Math.max(0, 1 - (now - laser.dot.end) / 250) : 1, r = 14 / s;
+        const g = c.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, `rgba(255,255,255,${a})`); g.addColorStop(0.25, `rgba(255,45,85,${a})`); g.addColorStop(1, 'rgba(255,45,85,0)');
+        c.globalAlpha = 1; c.fillStyle = g; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill();
+      }
       c.restore();
-      laser.raf = P.length || mode === 'laser' ? requestAnimationFrame(tick) : 0;
-      if (!laser.raf) act = null;
+      const busy = laser.strokes.length || laser.dot || mode === 'laser';
+      laser.raf = busy ? requestAnimationFrame(tick) : 0;
+      if (!busy) { act = null; clearLive(v); }
     };
     laser.raf = requestAnimationFrame(tick);
   }
@@ -1161,7 +1250,7 @@ function renderNotebook(nb) {
 
   inkApi = {
     nb, curPg, buildShells, repaintPg, pushUndo, restore, bar, thumbs, scrollToPage, zoomBy, openPop, closePop, refreshThumb,
-    viewOf: pg => V.get(pg), renderSel, drawInk, renderItems,
+    viewOf: pg => V.get(pg), renderSel, drawInk, renderItems, openSizePop, openColorPop, setSlotColor,
     rebuild(keep = ui.inkPage) { buildShells(); thumbs(); bar(); floatBar(); setTimeout(() => scrollToPage(Math.min(keep, nb.pages.length - 1), false), 0); },
   };
   cleanup = () => { if (lastTimer && shells.length) saveSpot(); ro.disconnect(); io?.disconnect(); thumbIO?.disconnect(); cancelAnimationFrame(laser.raf); document.removeEventListener('keydown', onKey); document.removeEventListener('keyup', onKeyUp); inkApi = null; ink.sel = null; };
@@ -1264,14 +1353,19 @@ Object.assign(A, {
   'ink-cslot': a => {
     const k = toolKind(ink.tool), i = +a.dataset.i;
     if (ink.colorIdx[k] !== i) { ink.colorIdx[k] = i; keepInkPrefs(); inkApi.bar(); return; }
-    const inp = document.createElement('input'); inp.type = 'color'; inp.value = ink.colors[k][i];
-    inp.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
-    document.body.appendChild(inp);
-    inp.addEventListener('input', () => { ink.colors[k][i] = inp.value; keepInkPrefs(); inkApi?.bar(); });
-    inp.addEventListener('change', () => inp.remove());
-    inp.click();
+    inkApi.openColorPop($(`.ink-bar [data-act="ink-cslot"][data-i="${i}"]`) || a, k, i);
   },
-  'ink-sslot': a => { const k = ink.tool === 'shape' ? 'pen' : ink.tool; ink.sizeIdx[k] = +a.dataset.i; keepInkPrefs(); inkApi.bar(); },
+  'cp-pick': a => {
+    const [k, i] = ($('.ink-pop').dataset.slot || '').split(':');
+    inkApi.setSlotColor(k, +i, a.dataset.c);
+    inkApi.openColorPop($(`.ink-bar [data-act="ink-cslot"][data-i="${i}"]`), k, +i);
+  },
+  'ink-sslot': a => {
+    const k = ink.tool === 'shape' ? 'pen' : ink.tool, i = +a.dataset.i;
+    if (ink.sizeIdx[k] !== i) { ink.sizeIdx[k] = i; keepInkPrefs(); inkApi.bar(); return; }
+    inkApi.openSizePop($(`.ink-bar [data-act="ink-sslot"][data-i="${i}"]`) || a, k, i);
+  },
+  'laser-mode': a => { ink.laserMode = a.dataset.m; keepInkPrefs(); inkApi.closePop(); inkApi.bar(); },
   'pen-style': a => { ink.penStyle = a.dataset.s; keepInkPrefs(); inkApi.bar(); inkApi.openPop(null); },
   'pen-reset': () => { ink.penOpts[ink.penStyle] = { ...PEN_DEFAULTS[ink.penStyle] }; ink.sizes.pen[ink.sizeIdx.pen] = [1.5, 3, 5.5][ink.sizeIdx.pen]; keepInkPrefs(); inkApi.bar(); inkApi.openPop(null); },
   'hl-tip': a => { ink.hlOpts.tip = a.dataset.s; keepInkPrefs(); inkApi.openPop(null); },

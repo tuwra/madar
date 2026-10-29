@@ -826,3 +826,18 @@ dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 40px); 
 #app.focus #nav { display: none; }
 
 .pages-col, .pg, .pg canvas { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+/* color and size editors (tap the chosen color or size again) */
+.cp { width: 272px; padding: 6px; display: flex; flex-direction: column; gap: 8px; }
+.cp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.cp-sw { width: 30px; height: 30px; border-radius: 50%; border: 0; padding: 0; background: var(--c); box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); transition: transform .1s; }
+.cp-sw:hover { transform: scale(1.1); }
+.cp-sw.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent); }
+.cp-label { font-size: 11.5px; color: var(--muted); }
+.cp-hex { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 10px; padding: 4px 8px; background: var(--bg); }
+.cp-hex i { width: 22px; height: 22px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); flex: none; }
+.cp-hex span { color: var(--muted); font-family: ui-monospace, Menlo, monospace; }
+.cp-hex input { flex: 1; border: 0; outline: none; background: none; color: var(--text); font: 14px ui-monospace, Menlo, monospace; text-transform: uppercase; min-width: 0; }
+.sz-pop { width: 260px; }
+.sz-prev { height: 64px; display: grid; place-items: center; background: #fff; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--line); }
+.sz-prev span { border-radius: 50%; display: block; box-shadow: 0 0 0 1px rgba(0,0,0,.25) inset; }
+.ios-app .cp-sw { width: 32px; height: 32px; }
