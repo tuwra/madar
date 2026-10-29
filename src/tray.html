@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:">
+<title>مدار</title>
+<link rel="stylesheet" href="vendor/fonts.css">
+<link rel="stylesheet" href="tray.css">
+</head>
+<body>
+<div class="tray">
+  <header>
+    <div>
+      <div class="day" id="day"></div>
+      <div class="hijri" id="hijri"></div>
+    </div>
+    <button class="open-app" data-open="today" title="فتح مدار">
+      <svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>
+    </button>
+  </header>
+
+  <nav>
+    <button data-open="tasks"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M8 12l3 3 5-6"/></svg><span>المهام</span></button>
+    <button data-open="calendar"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span>التقويم</span></button>
+    <button data-open="notes"><svg viewBox="0 0 24 24"><path d="M14 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5z"/><path d="M14 3.5v5h5M9 13h6M9 16.5h4"/></svg><span>الملاحظات</span></button>
+    <button data-open="ink"><svg viewBox="0 0 24 24"><path d="M4.5 19.5l1-4.2L16 4.8a2 2 0 0 1 2.9 0l.3.3a2 2 0 0 1 0 2.9L8.7 18.5z"/><path d="M14.5 6.5l3 3"/></svg><span>الدفاتر</span></button>
+  </nav>
+
+  <form id="quick" autocomplete="off">
+    <input id="q" placeholder="أضف مهمة… (بكرة 5:30 !!)">
+  </form>
+
+  <main id="list"></main>
+
+  <footer>
+    <span id="count"></span>
+    <button data-open="tasks">كل المهام ←</button>
+  </footer>
+</div>
+<script src="tray.js"></script>
+</body>
+</html>

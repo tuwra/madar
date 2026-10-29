@@ -20,4 +20,5 @@ contextBridge.exposeInMainWorld('madar', {
   revealFile: p => call('file:reveal', p),
   fileExists: p => call('file:exists', p),
   ask: opts => call('ask', opts),
+  changed: () => ipcRenderer.send('state:changed'),
 });

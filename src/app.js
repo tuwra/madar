@@ -89,7 +89,7 @@ function save() {
 }
 function flush() {
   clearTimeout(saveTimer); saveTimer = null;
-  if (store.ready) store.saveState(state).catch(err => { console.error('save failed', err); toast('ما قدرت أحفظ التغييرات: ' + err.message); });
+  if (store.ready) store.saveState(state).then(() => desktop?.changed?.()).catch(err => { console.error('save failed', err); toast('ما قدرت أحفظ التغييرات: ' + err.message); });
 }
 document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
 window.addEventListener('pagehide', flush);
@@ -438,6 +438,36 @@ document.addEventListener('submit', e => {
   save(); render();
   $('form[data-quick] input')?.focus();
 });
+/* ---------- what the menu bar window asks for ---------- */
+window.trayApi = {
+  summary() {
+    const td = todayStr();
+    const tasks = state.tasks.filter(t => t.due && (t.due < td ? !t.done : t.due === td) || (t.done && t.doneAt && ymd(new Date(t.doneAt)) === td && t.due && t.due <= td))
+      .sort((a, b) => a.done - b.done || byTask(a, b))
+      .map(t => {
+        const l = listOf(t.listId), late = !t.done && t.due < td;
+        const meta = [late ? dueLabel(t) : t.time, l.id !== 'inbox' ? l.name : ''].filter(Boolean).join(' · ');
+        return { id: t.id, title: t.title, done: t.done, priority: t.priority, late, meta };
+      });
+    const events = state.events.filter(e => e.date === td).sort((a, b) => (a.start || '').localeCompare(b.start || ''))
+      .map(e => ({ title: e.title, color: e.color, time: e.start ? `${e.start}${e.end ? ' – ' + e.end : ''}` : 'طوال اليوم' }));
+    return { dateLabel: fmt(td, { weekday: 'long', day: 'numeric', month: 'long' }), hijri: hijri(td), tasks, events, open: tasks.filter(t => !t.done).length };
+  },
+  refreshView() { if (['today', 'tasks', 'calendar'].includes(ui.view) && !$('#dlg').open && !document.activeElement?.closest?.('form[data-quick]')) render(); },
+  toggle(id) {
+    const t = state.tasks.find(x => x.id === id);
+    if (t) { t.done = !t.done; t.doneAt = t.done ? Date.now() : null; flush(); this.refreshView(); }
+    return this.summary();
+  },
+  add(text) {
+    const p = parseQuick(text, { due: todayStr() });
+    state.tasks.push({ ...newTask(p.title, 'inbox', p.due, p.priority), time: p.time });
+    flush(); this.refreshView();
+    return this.summary();
+  },
+  open(v) { if (ui.view !== v || v === 'ink') go(v, v === 'ink' ? { notebookId: null } : {}); },
+};
+
 function toast(msg, ms = 2600) {
   let t = $('#toast');
   if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }

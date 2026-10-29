@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, Tray, nativeImage, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -150,13 +150,17 @@ ipcMain.handle('ask', async (e, { message, detail, buttons }) => {
 });
 
 /* ---------- window ---------- */
+let mainWin = null, tray = null, trayWin = null, quitting = false;
 function createWindow() {
-  const win = new BrowserWindow({
+  const win = mainWin = new BrowserWindow({
     width: 1320, height: 860, minWidth: 380, minHeight: 520,
     title: 'مدار', backgroundColor: '#f7f7f5', show: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false },
   });
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => { if (!process.env.MADAR_HIDDEN) win.show(); });
+  // closing the window keeps Madar running in the menu bar, like other Mac apps
+  win.on('close', e => { if (!quitting && process.platform === 'darwin') { e.preventDefault(); win.hide(); } });
+  win.on('closed', () => { if (mainWin === win) mainWin = null; });
   // links open in the default browser, never inside the app
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:')) { e.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url); } });
@@ -178,11 +182,76 @@ function createWindow() {
         return out;
       })()`);
       console.log('SELFTEST', JSON.stringify(result));
-      app.quit();
+      if (trayWin && process.env.MADAR_SHOT) {
+        const sum = await askMain('window.trayApi.summary()');
+        console.log('TRAY', JSON.stringify({ title: tray.getTitle(), open: sum.open, tasks: sum.tasks.length }));
+        trayWin.setPosition(200, 60); trayWin.showInactive(); trayWin.webContents.send('tray:refresh');
+        await new Promise(r => setTimeout(r, 1200));
+        fs.writeFileSync(process.env.MADAR_SHOT, (await trayWin.webContents.capturePage()).toPNG());
+      }
+      quitting = true; app.quit();
     });
   }
 }
 
+/* ---------- menu bar ---------- */
+const TRAY_W = 340, TRAY_H = 470;
+async function askMain(code) {
+  if (!mainWin) createWindow();
+  const wc = mainWin.webContents;
+  if (wc.isLoading()) await new Promise(r => wc.once('did-finish-load', r));
+  for (let i = 0; i < 20; i++) {
+    if (await wc.executeJavaScript('!!(window.trayApi && window.state)')) break;
+    await new Promise(r => setTimeout(r, 100));
+  }
+  return wc.executeJavaScript(code);
+}
+async function updateTrayTitle() {
+  if (!tray) return;
+  try { const s = await askMain('window.trayApi.summary()'); tray.setTitle(s.open ? ` ${s.open}` : '', { fontType: 'monospacedDigit' }); tray.setToolTip(s.open ? `مدار · باقي ${s.open} من مهام اليوم` : 'مدار'); } catch { /* window not ready */ }
+}
+function createTray() {
+  const icon = nativeImage.createFromPath(path.join(__dirname, 'trayTemplate.png'));
+  icon.setTemplateImage(true);
+  tray = new Tray(icon);
+  trayWin = new BrowserWindow({
+    width: TRAY_W, height: TRAY_H, show: false, frame: false, resizable: false, movable: false, fullscreenable: false,
+    skipTaskbar: true, alwaysOnTop: true, transparent: true, vibrancy: 'popover', visualEffectState: 'active', roundedCorners: true,
+    webPreferences: { preload: path.join(__dirname, 'tray-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false },
+  });
+  trayWin.loadFile(path.join(__dirname, '..', 'src', 'tray.html'));
+  trayWin.on('blur', () => trayWin.hide());
+  const toggle = () => {
+    if (trayWin.isVisible()) return trayWin.hide();
+    const b = tray.getBounds(), area = screen.getDisplayMatching(b).workArea;
+    const x = Math.round(Math.min(area.x + area.width - TRAY_W - 8, Math.max(area.x + 8, b.x + b.width / 2 - TRAY_W / 2)));
+    trayWin.setPosition(x, Math.round(b.y + b.height + 4), false);
+    trayWin.show(); trayWin.focus();
+    trayWin.webContents.send('tray:refresh');
+  };
+  tray.on('click', toggle);
+  tray.on('right-click', () => tray.popUpContextMenu(Menu.buildFromTemplate([
+    { label: 'فتح مدار', click: () => showMain() },
+    { type: 'separator' },
+    { label: 'إنهاء مدار', click: () => { quitting = true; app.quit(); } },
+  ])));
+  updateTrayTitle();
+  // the day changes at midnight: refresh the count every few minutes
+  setInterval(updateTrayTitle, 5 * 60 * 1000);
+}
+function showMain(view) {
+  if (!mainWin) createWindow();
+  mainWin.show(); mainWin.focus();
+  if (view) askMain(`window.trayApi.open(${JSON.stringify(view)})`);
+}
+ipcMain.handle('tray:summary', () => askMain('window.trayApi.summary()'));
+ipcMain.handle('tray:toggle', (_e, id) => askMain(`window.trayApi.toggle(${JSON.stringify(String(id))})`));
+ipcMain.handle('tray:add', (_e, text) => askMain(`window.trayApi.add(${JSON.stringify(String(text))})`));
+ipcMain.handle('tray:open', (_e, view) => { trayWin?.hide(); showMain(String(view)); });
+ipcMain.handle('tray:hide', () => trayWin?.hide());
+ipcMain.on('state:changed', () => { updateTrayTitle(); if (trayWin?.isVisible()) trayWin.webContents.send('tray:refresh'); });
+
+app.on('before-quit', () => { quitting = true; });
 app.whenReady().then(() => {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { role: 'appMenu' },
@@ -192,6 +261,7 @@ app.whenReady().then(() => {
     { role: 'help', submenu: [{ label: 'صفحة المشروع على GitHub', click: () => shell.openExternal('https://github.com/tuwra/madar') }] },
   ]));
   createWindow();
-  app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
+  if (process.platform === 'darwin') createTray();
+  app.on('activate', () => showMain());
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
