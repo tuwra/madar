@@ -136,7 +136,8 @@ function go(v, extra = {}) { Object.assign(ui, { view: v }, extra); view.scrollT
 /* ---------- tasks logic ---------- */
 const WEEKDAY_WORDS = { 'الأحد': 0, 'الاحد': 0, 'الإثنين': 1, 'الاثنين': 1, 'الثلاثاء': 2, 'الأربعاء': 3, 'الاربعاء': 3, 'الخميس': 4, 'الجمعة': 5, 'الجمعه': 5, 'السبت': 6 };
 function parseQuick(text, defaults = {}) {
-  let t = ' ' + text + ' ';
+  const rp = parseRepeat(text);
+  let t = ' ' + rp.text + ' ';
   let due = defaults.due || null, priority = 0, time = null;
   const word = w => new RegExp(`\\s${w}(?=\\s)`);
   const bang = t.match(/!{1,3}/);
@@ -154,7 +155,8 @@ function parseQuick(text, defaults = {}) {
     }
   }
   if (time && !due) due = todayStr();
-  return { title: t.replace(/\s+/g, ' ').trim() || text.trim(), due, priority, time };
+  if (rp.repeat) due = firstDue(rp.repeat, due || todayStr());
+  return { title: t.replace(/\s+/g, ' ').trim() || text.trim(), due, priority, time, repeat: rp.repeat };
 }
 const byTask = (a, b) => (a.due || '9999').localeCompare(b.due || '9999') || (a.time || '99').localeCompare(b.time || '99') || b.priority - a.priority || a.created - b.created;
 function dueLabel(t) {
@@ -198,9 +200,14 @@ function taskDialog(id) {
     <div class="row"><label>التاريخ<input type="date" name="due" value="${t.due || ''}"></label><label>الوقت<input type="time" name="time" value="${t.time || ''}"></label></div>
     <div class="row"><label>الأولوية<select name="priority">${PRI.map((p, i) => `<option value="${i}" ${i === t.priority ? 'selected' : ''}>${p}</option>`).join('')}</select></label>
     <label>القائمة<select name="listId">${state.lists.map(l => `<option value="${l.id}" ${l.id === t.listId ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select></label></div>
+    ${repeatFields(t.repeat)}
     ${actions(true)}`, (fd, v) => {
     if (v === 'delete') state.tasks = state.tasks.filter(x => x !== t);
-    else Object.assign(t, { title: fd.get('title').trim() || t.title, notes: fd.get('notes'), due: fd.get('due') || null, time: fd.get('time') || null, priority: +fd.get('priority'), listId: fd.get('listId') });
+    else {
+      const repeat = readRepeat(fd);
+      Object.assign(t, { title: fd.get('title').trim() || t.title, notes: fd.get('notes'), due: fd.get('due') || null, time: fd.get('time') || null, priority: +fd.get('priority'), listId: fd.get('listId'), repeat });
+      if (repeat && !t.due) t.due = firstDue(repeat);
+    }
     save(); render();
   });
 }
@@ -272,7 +279,7 @@ document.addEventListener('submit', e => {
   e.preventDefault();
   const text = f.elements.q.value.trim(); if (!text) return;
   const p = parseQuick(text, { due: f.dataset.due || null });
-  state.tasks.push({ ...newTask(p.title, f.dataset.list || 'inbox', p.due, p.priority), time: p.time });
+  state.tasks.push({ ...newTask(p.title, f.dataset.list || 'inbox', p.due, p.priority), time: p.time, repeat: p.repeat });
   save(); render();
   $('form[data-quick] input')?.focus();
 });
@@ -295,12 +302,12 @@ window.trayApi = {
   refreshView() { if (['today', 'tasks', 'calendar'].includes(ui.view) && !$('#dlg').open && !document.activeElement?.closest?.('form[data-quick]')) render(); },
   toggle(id) {
     const t = state.tasks.find(x => x.id === id);
-    if (t) { t.done = !t.done; t.doneAt = t.done ? Date.now() : null; flush(); this.refreshView(); }
+    if (t) { setTaskDone(t, !t.done); flush(); this.refreshView(); }
     return this.summary();
   },
   add(text) {
     const p = parseQuick(text, { due: todayStr() });
-    state.tasks.push({ ...newTask(p.title, 'inbox', p.due, p.priority), time: p.time });
+    state.tasks.push({ ...newTask(p.title, 'inbox', p.due, p.priority), time: p.time, repeat: p.repeat });
     flush(); this.refreshView();
     return this.summary();
   },
@@ -334,7 +341,7 @@ window.trayApi = {
     if (p.time && !/!/.test(text)) {
       const [h, mi] = p.time.split(':').map(Number);
       state.events.push({ id: uid(), title: p.title, date: p.due || ds, start: p.time, end: `${pad(Math.min(23, h + 1))}:${pad(mi)}`, color: COLORS[1] });
-    } else state.tasks.push({ ...newTask(p.title, 'inbox', p.due || ds, p.priority), time: p.time });
+    } else state.tasks.push({ ...newTask(p.title, 'inbox', p.due || ds, p.priority), time: p.time, repeat: p.repeat });
     flush(); this.refreshView();
     return this.day(ds);
   },

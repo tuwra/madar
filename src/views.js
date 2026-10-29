@@ -14,7 +14,7 @@ function taskRow(t, { showList = true } = {}) {
     <button class="check p${t.priority}" data-act="toggle" aria-label="إنجاز"></button>
     <div class="task-body" data-act="task-open">
       <div class="task-title" data-act="task-open">${esc(t.title)}</div>
-      <div class="task-meta">${t.due ? `<span class="chip ${late ? 'late' : ''}">${dueLabel(t)}</span>` : ''}${subs.length ? `<span class="chip sub-chip"><span class="mini-bar"><i style="width:${doneSubs / subs.length * 100}%"></i></span>${doneSubs}/${subs.length}</span>` : ''}${showList && l.id !== 'inbox' ? `<span class="chip"><span class="dot" style="--c:${l.color}"></span>${esc(l.name)}</span>` : ''}${t.notes ? '<span class="chip">📝</span>' : ''}</div>
+      <div class="task-meta">${t.due ? `<span class="chip ${late ? 'late' : ''}">${dueLabel(t)}</span>` : ''}${t.repeat ? `<span class="chip rep-chip">🔁 ${repeatLabel(t.repeat)}</span>` : ''}${subs.length ? `<span class="chip sub-chip"><span class="mini-bar"><i style="width:${doneSubs / subs.length * 100}%"></i></span>${doneSubs}/${subs.length}</span>` : ''}${showList && l.id !== 'inbox' ? `<span class="chip"><span class="dot" style="--c:${l.color}"></span>${esc(l.name)}</span>` : ''}${t.notes ? '<span class="chip">📝</span>' : ''}</div>
       ${open ? `<div class="subs" data-stop>
         ${subs.map(s => `<div class="sub ${s.done ? 'done' : ''}" data-sub="${s.id}"><button class="check small" data-act="sub-toggle" aria-label="إنجاز"></button><span class="sub-text" contenteditable="true" data-sub-edit spellcheck="false">${esc(s.text)}</span><button class="x" data-act="sub-del" aria-label="حذف">×</button></div>`).join('')}
         <form class="sub-add" data-sub-form><input placeholder="أضف مهمة فرعية…" autocomplete="off"></form>
@@ -24,6 +24,7 @@ function taskRow(t, { showList = true } = {}) {
     <button class="task-more" data-act="task-menu" aria-label="خيارات">⋯</button>
   </div>`;
 }
+const ghostRow = t => `<div class="task ghost" data-task="${t.id}" data-act="edit" title="تتكرر ${repeatLabel(t.repeat)}"><span class="check p${t.priority}"></span><div class="task-body"><div class="task-title">${esc(t.title)}</div><div class="task-meta"><span class="chip rep-chip">🔁 ${repeatLabel(t.repeat)}</span></div></div></div>`;
 const taskList2 = (tasks, opt) => tasks.length ? tasks.map(t => taskRow(t, opt)).join('') : '';
 
 /* ---------- today ---------- */
@@ -119,7 +120,8 @@ function renderTasks() {
     title = 'الأيام القادمة'; body = ''; scope = [];
     for (let i = 1; i <= 7; i++) {
       const d = addDays(td, i), ts = state.tasks.filter(t => t.due === d).sort((a, b) => a.done - b.done || byTask(a, b)); scope.push(...ts);
-      body += `<div class="day-group" data-drop-day="${d}"><h2>${i === 1 ? 'غداً' : fmt(d, { weekday: 'long' })} · ${fmt(d, { day: 'numeric', month: 'short' })}</h2>${taskList2(ts) || '<div class="drop-hint">اسحب مهمة هنا</div>'}</div>`;
+      const ghosts = state.tasks.filter(t => occurrences(t, d, d).length);
+      body += `<div class="day-group" data-drop-day="${d}"><h2>${i === 1 ? 'غداً' : fmt(d, { weekday: 'long' })} · ${fmt(d, { day: 'numeric', month: 'short' })}</h2>${taskList2(ts)}${ghosts.map(ghostRow).join('')}${!ts.length && !ghosts.length ? '<div class="drop-hint">اسحب مهمة هنا</div>' : ''}</div>`;
     }
     addOpts = { due: addDays(td, 1) };
   } else if (f === 'all') {
@@ -159,8 +161,8 @@ function renderTasks() {
 function toggleTask(t, el) {
   if (el && !t.done) {
     el.classList.add('completing');
-    setTimeout(() => { t.done = true; t.doneAt = Date.now(); save(); render(); }, 420);
-  } else { t.done = !t.done; t.doneAt = t.done ? Date.now() : null; save(); render(); }
+    setTimeout(() => { const next = setTaskDone(t, true); save(); render(); if (next) toast(`🔁 تمت. الموعد الجاي: ${dueLabel(t)}`); }, 420);
+  } else { setTaskDone(t, !t.done); save(); render(); }
 }
 
 /* ---------- right-click menu ---------- */
@@ -195,6 +197,15 @@ function taskMenu(t, x, y) {
       { title: 'بدون تاريخ', html: '⊘', run: () => set({ due: null, time: null }) },
     ] },
     { row: [3, 2, 1, 0].map(p => ({ title: PRI[p], html: `<span class="pflag p${p}"></span>`, run: () => set({ priority: p }) })) },
+    '-',
+    { label: `🔁 تكرار${t.repeat ? ': ' + repeatLabel(t.repeat) : ''}`, run: () => {} },
+    { row: [
+      { title: 'كل يوم', html: '<small>يوميًا</small>', run: () => set({ repeat: { kind: 'daily' }, due: t.due || td }) },
+      { title: 'أيام الدوام (الأحد إلى الخميس)', html: '<small>الدوام</small>', run: () => set({ repeat: { kind: 'days', days: WORKDAYS }, due: firstDue({ kind: 'days', days: WORKDAYS }, t.due || td) }) },
+      { title: 'كل أسبوع', html: '<small>أسبوعيًا</small>', run: () => set({ repeat: { kind: 'weekly' }, due: t.due || td }) },
+      { title: 'أختار الأيام', html: '<small>أيام…</small>', run: () => taskDialog(t.id) },
+      { title: 'إلغاء التكرار', html: '⊘', run: () => set({ repeat: null }) },
+    ] },
     '-',
     ...state.lists.filter(l => l.id !== t.listId).slice(0, 6).map(l => ({ label: `<span class="dot" style="--c:${l.color}"></span> نقل إلى ${esc(l.name)}`, run: () => set({ listId: l.id }) })),
     '-',
@@ -237,7 +248,7 @@ document.addEventListener('drop', e => {
   if (d.dropDay || d.day) { t.due = d.dropDay || d.day; toast(`صارت ${dueLabel(t)}`); }
   else if (d.drop === 'today') { t.due = td; toast('صارت لليوم'); }
   else if (d.drop === 'upcoming') { t.due = addDays(td, 1); toast('صارت لبكرة'); }
-  else if (d.drop === 'done') { t.done = true; t.doneAt = Date.now(); }
+  else if (d.drop === 'done') setTaskDone(t, true);
   else if (d.drop === 'all') return;
   else if (state.lists.some(l => l.id === d.drop)) { t.listId = d.drop; toast(`انتقلت إلى ${listOf(d.drop).name}`); }
   save(); render();
@@ -264,7 +275,8 @@ function renderCalendar() {
     const ts = state.tasks.filter(t => t.due === ds).sort(byTask);
     const items = [
       ...evs.map(e => `<div class="ev" style="--c:${e.color}" data-act="event" data-ev="${e.id}" draggable="true">${e.start ? e.start + ' ' : ''}${esc(e.title)}</div>`),
-      ...ts.map(t => `<div class="ev t ${t.done ? 'done' : ''}" style="--c:${listOf(t.listId).color}" data-act="edit" data-task="${t.id}" draggable="true">${esc(t.title)}</div>`),
+      ...ts.map(t => `<div class="ev t ${t.done ? 'done' : ''}" style="--c:${listOf(t.listId).color}" data-act="edit" data-task="${t.id}" draggable="true">${t.repeat ? '🔁 ' : ''}${esc(t.title)}</div>`),
+      ...state.tasks.filter(t => occurrences(t, ds, ds).length).map(t => `<div class="ev t ghost" style="--c:${listOf(t.listId).color}" data-act="edit" data-task="${t.id}">🔁 ${esc(t.title)}</div>`),
     ];
     cells += `<div class="day ${ds.slice(0, 7) !== m ? 'other' : ''} ${ds === td ? 'today' : ''} ${ds === sel ? 'sel' : ''}" data-act="day" data-day="${ds}">
       <span class="day-n">${d.getDate()}</span>${items.slice(0, 3).join('')}${items.length > 3 ? `<span class="more">+${items.length - 3}</span>` : ''}<button class="day-add" data-act="add-event" data-day="${ds}" aria-label="موعد جديد">＋</button></div>`;
@@ -317,7 +329,7 @@ function renderWeek(head) {
   view.innerHTML = `<div class="week-wrap">${head(label)}
     <div class="week">
       <div class="wk-row wk-head"><div class="wk-gutter"></div>${days.map(ds => `<button class="wk-day ${ds === td ? 'today' : ''} ${ds === ui.calDay ? 'sel' : ''}" data-act="wk-pick" data-day="${ds}"><span>${DOW_SHORT[parseYmd(ds).getDay()]}</span><b>${parseYmd(ds).getDate()}</b></button>`).join('')}</div>
-      <div class="wk-row wk-all"><div class="wk-gutter">طوال اليوم</div>${days.map(ds => `<div class="wk-allcell" data-drop-day="${ds}">${state.events.filter(e => e.date === ds && !e.start).map(e => `<div class="ev" style="--c:${e.color}" data-act="event" data-ev="${e.id}">${esc(e.title)}</div>`).join('')}${state.tasks.filter(t => t.due === ds && !t.time).map(t => `<div class="ev t ${t.done ? 'done' : ''}" style="--c:${listOf(t.listId).color}" data-act="edit" data-task="${t.id}" draggable="true">${esc(t.title)}</div>`).join('')}</div>`).join('')}</div>
+      <div class="wk-row wk-all"><div class="wk-gutter">طوال اليوم</div>${days.map(ds => `<div class="wk-allcell" data-drop-day="${ds}">${state.events.filter(e => e.date === ds && !e.start).map(e => `<div class="ev" style="--c:${e.color}" data-act="event" data-ev="${e.id}">${esc(e.title)}</div>`).join('')}${state.tasks.filter(t => t.due === ds && !t.time).map(t => `<div class="ev t ${t.done ? 'done' : ''}" style="--c:${listOf(t.listId).color}" data-act="edit" data-task="${t.id}" draggable="true">${t.repeat ? '🔁 ' : ''}${esc(t.title)}</div>`).join('')}${state.tasks.filter(t => !t.time && occurrences(t, ds, ds).length).map(t => `<div class="ev t ghost" style="--c:${listOf(t.listId).color}" data-act="edit" data-task="${t.id}">🔁 ${esc(t.title)}</div>`).join('')}</div>`).join('')}</div>
       <div class="wk-body"><div class="wk-inner" style="height:${24 * HOUR}px">
         <div class="wk-hours">${Array.from({ length: 24 }, (_, h) => `<span style="top:${h * HOUR}px">${h ? h + ':00' : ''}</span>`).join('')}</div>
         <div class="wk-cols" style="--hh:${HOUR}px">${cols}</div>
