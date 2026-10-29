@@ -1,8 +1,4 @@
 'use strict';
-// Google sign-in for sync. These are "installed app" OAuth clients: Google expects their IDs
-// (and the desktop client's secret) to ship inside the app; they grant nothing on their own.
-window.MADAR_GOOGLE = {
-  desktopId: '',
-  desktopSecret: '',
-  iosId: '',
-};
+// Google sign-in for sync. The real IDs are not kept in the public code: local builds read them
+// from google-config.local.js (git-ignored), and release builds get that file from repository secrets.
+window.MADAR_GOOGLE = Object.assign({ desktopId: '', desktopSecret: '', iosId: '' }, window.MADAR_GOOGLE_LOCAL || {});

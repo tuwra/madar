@@ -4,3 +4,6 @@ src/vendor/
 .DS_Store
 .claude/
 src/.claude/
+
+# Google sign-in IDs for local builds (CI writes this file from repository secrets)
+src/google-config.local.js
