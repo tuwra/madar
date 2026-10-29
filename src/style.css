@@ -476,7 +476,7 @@ dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 40px); 
 .ink-stage { background: var(--desk); overflow: auto; direction: ltr; flex: 1; display: block; }
 .pages-col { display: flex; flex-direction: column; align-items: center; gap: 28px; padding: 28px 36px 120px; width: max-content; min-width: 100%; }
 .pg { position: relative; flex: none; background: #fff; border-radius: 2px; box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 6px 22px rgba(0,0,0,.08); touch-action: none; }
-.finger-pan .pg { touch-action: pan-x pan-y; }
+.finger-pan .pg { touch-action: none; }
 .pg canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .ink.tool-eraser .c-live { cursor: none; }
 .ink-float {
@@ -810,3 +810,17 @@ dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 40px); 
 .ios-app #nav { padding-bottom: max(8px, env(safe-area-inset-bottom, 0px)); }
 .ios-app .ink-float { bottom: max(16px, calc(env(safe-area-inset-bottom, 0px) + 6px)); }
 @media (min-width: 761px) { .ios-app #view { padding-bottom: max(60px, env(safe-area-inset-bottom, 0px)); } }
+
+/* narrower screens (iPad portrait, small windows): tools get their own row so nothing overlaps */
+@media (max-width: 1240px) {
+  .ink-bar { display: flex; flex-wrap: wrap; height: auto; row-gap: 4px; padding: 6px 10px; }
+  .ink-bar .tb-side { flex: 1; }
+  .ink-bar .tb-tools { order: 3; flex: 1 1 100%; justify-content: center; flex-wrap: wrap; row-gap: 4px; }
+}
+.ios-app .tb { width: 40px; height: 40px; }
+.ios-app .tb .icon { width: 23px; height: 23px; }
+.ios-app .cslot { width: 26px; height: 26px; }
+.ios-app .sslot { width: 34px; height: 34px; }
+
+#app.focus { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+#app.focus #nav { display: none; }

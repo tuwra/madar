@@ -876,6 +876,18 @@ function renderNotebook(nb) {
     return [Math.round((e.clientX - r.left) / scale * 10) / 10, Math.round((e.clientY - r.top) / scale * 10) / 10, Math.round(pr * 100) / 100];
   };
   const touches = new Map();
+  // keep gliding after a finger flick, like native scrolling
+  const fling = { v: [0, 0], t: 0, raf: 0 };
+  function runFling() {
+    let [vx, vy] = fling.v, last = performance.now();
+    const step = now => {
+      const dt = now - last; last = now;
+      stage.scrollBy(vx * dt, vy * dt);
+      const k = Math.pow(0.995, dt); vx *= k; vy *= k;
+      if (Math.hypot(vx, vy) > 0.02) fling.raf = requestAnimationFrame(step);
+    };
+    fling.raf = requestAnimationFrame(step);
+  }
   let spaceHand = false;
   let act = null, cur = null, mode = null, gesture = null, lasso = null, start = null, erasing = null, holdTimer = null, holdAnchor = null, selDrag = null;
   const laser = { pts: [], raf: 0, v: null };
@@ -892,7 +904,9 @@ function renderNotebook(nb) {
         gesture = { d0: dist(a, b) || 1, mid0: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], last: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], t0: Date.now(), moved: false, count: touches.size };
         return;
       }
-      if (fingerPans()) return; // the page scrolls natively
+      // the app pans the page itself: if the browser were allowed to scroll, iPadOS could read a
+      // pencil stroke as a scroll and cancel it halfway, which is what broke lines and the laser
+      if (fingerPans()) { cancelAnimationFrame(fling.raf); mode = 'hand'; start = [e.clientX, e.clientY]; fling.v = [0, 0]; fling.t = performance.now(); return; }
     }
     if (e.button > 0) return;
     if (ink.tool === 'hand' || spaceHand) {
@@ -949,7 +963,12 @@ function renderNotebook(nb) {
         return;
       }
     }
-    if (mode === 'hand') { stage.scrollBy(start[0] - e.clientX, start[1] - e.clientY); start = [e.clientX, e.clientY]; return; }
+    if (mode === 'hand') {
+      const dx = start[0] - e.clientX, dy = start[1] - e.clientY, now = performance.now(), dt = Math.max(1, now - fling.t);
+      stage.scrollBy(dx, dy); start = [e.clientX, e.clientY];
+      fling.v = [fling.v[0] * 0.6 + dx / dt * 0.4, fling.v[1] * 0.6 + dy / dt * 0.4]; fling.t = now;
+      return;
+    }
     if (!mode || !act) {
       if (ink.tool === 'eraser' && e.pointerType !== 'touch') {
         const shell = e.target.closest?.('.pg'), v = shell && V.get(nb.pages[+shell.dataset.i]);
@@ -989,7 +1008,11 @@ function renderNotebook(nb) {
       }
     }
     clearTimeout(holdTimer);
-    if (mode === 'hand') { mode = null; root.classList.remove('grabbing'); return; }
+    if (mode === 'hand') {
+      mode = null; root.classList.remove('grabbing');
+      if (e.pointerType === 'touch' && performance.now() - fling.t < 80) runFling();
+      return;
+    }
     const m = mode, v = act; mode = null;
     if (!v) return;
     if (m === 'pen' || m === 'hl' || m === 'shape') {
@@ -1072,7 +1095,13 @@ function renderNotebook(nb) {
   col.addEventListener('pointerdown', down);
   col.addEventListener('pointermove', move);
   col.addEventListener('pointerup', up);
-  col.addEventListener('pointercancel', e => { touches.delete(e.pointerId); if (!touches.size && gesture) { gesture = null; commitZoom(); } abortStroke(); if (mode !== 'laser') act = null; });
+  col.addEventListener('pointercancel', e => {
+    touches.delete(e.pointerId);
+    if (!touches.size && gesture) { gesture = null; commitZoom(); }
+    // the system cancelled the pointer (palm, gesture): keep the line drawn so far instead of losing it
+    if (e.pointerType === 'pen' && (mode === 'pen' || mode === 'hl') && cur) { up(e); return; }
+    abortStroke(); if (mode !== 'laser') act = null;
+  });
   col.addEventListener('pointerleave', () => { if (!mode && ink.tool === 'eraser') for (const v of V.values()) clearLive(v); });
 
   const onKeyUp = e => { if (e.key === ' ' && spaceHand) { spaceHand = false; root.classList.remove('space-hand'); } };

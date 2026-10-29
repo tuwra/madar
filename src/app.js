@@ -127,6 +127,8 @@ let cleanup = null;
 function render() {
   cleanup?.(); cleanup = null;
   view.classList.remove('full');
+  // an open notebook gets the whole screen, like GoodNotes; its back button brings the sidebar back
+  $('#app').classList.toggle('focus', ui.view === 'ink' && !!ui.notebookId);
   $$('#nav [data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === ui.view));
   ({ today: renderToday, tasks: renderTasks, habits: renderHabits, calendar: renderCalendar, notes: renderNotes, ink: renderInk })[ui.view]();
   try { localStorage.setItem('madar-ui', JSON.stringify({ view: ui.view, taskFilter: ui.taskFilter, pageId: ui.pageId, notebookId: ui.notebookId, inkPage: ui.inkPage })); } catch { /* ignore */ }
