@@ -67,6 +67,7 @@ const ic = (name, cls = '') => `<svg class="icon ${cls}" viewBox="0 0 24 24" ari
 
 /* ---------- pdf ---------- */
 if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
+if (window.Capacitor) { const s = document.createElement('script'); s.src = 'vendor/pdf.worker.min.js'; document.head.appendChild(s); document.documentElement.classList.add('ios-app'); }
 const pdfDocs = new Map();
 async function loadPdf(key) {
   if (!pdfDocs.has(key)) {

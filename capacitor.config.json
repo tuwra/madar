@@ -1,0 +1,10 @@
+{
+  "appId": "com.tuwra.madar",
+  "appName": "Madar",
+  "webDir": "src",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#141416",
+    "scrollEnabled": false
+  }
+}
