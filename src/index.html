@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self' blob: data:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self' blob: data: https://oauth2.googleapis.com https://www.googleapis.com">
 <title>مدار</title>
 <link rel="stylesheet" href="vendor/fonts.css">
 <link rel="stylesheet" href="vendor/katex/katex.min.css">
@@ -39,7 +39,10 @@
 <script src="views.js"></script>
 <script src="habits.js"></script>
 <script src="onboarding.js"></script>
+<script src="merge.js"></script>
+<script src="google-config.js"></script>
 <script src="sync.js"></script>
+<script src="cloud.js"></script>
 <script src="boot.js"></script>
 </body>
 </html>

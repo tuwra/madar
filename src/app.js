@@ -89,7 +89,7 @@ function save() {
 }
 function flush() {
   clearTimeout(saveTimer); saveTimer = null;
-  if (store.ready) store.saveState(state).then(() => desktop?.changed?.()).catch(err => { console.error('save failed', err); toast('ما قدرت أحفظ التغييرات: ' + err.message); });
+  if (store.ready) store.saveState(state).then(() => { desktop?.changed?.(); window.dispatchEvent(new Event('madar-saved')); }).catch(err => { console.error('save failed', err); toast('ما قدرت أحفظ التغييرات: ' + err.message); });
 }
 document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
 window.addEventListener('pagehide', flush);

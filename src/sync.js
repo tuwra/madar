@@ -13,6 +13,8 @@ async function storageDialog() {
       <b>${inCloud ? `✓ بياناتك تتزامن مع ${CLOUD_NAMES[inCloud.kind]}` : 'بياناتك محفوظة على هذا الماك فقط'}</b>
       <div class="hint" dir="ltr" style="text-align:right">${esc(info.dataDir)}</div>
     </div>
+    ${cloudSection()}
+    <span class="note">أو احفظ بياناتك في مجلد على هذا الجهاز</span>
     <p class="note">اختر مجلد داخل قوقل درايف، وكل مهامك وملاحظاتك ودفاترك وكتبك تنحفظ فيه وتتزامن لحالها. ثبّت مدار على ماك ثاني واختر نفس المجلد عشان تشوف نفس البيانات.</p>
     ${google ? `<button class="btn primary" value="cloud:${esc(google.path)}">△ احفظ في قوقل درايف</button>`
       : `<div class="store-now"><b>قوقل درايف مو مثبّت على هذا الماك</b><div class="hint">نزّل «Google Drive for desktop» وسجّل دخول، وبعدها ارجع هنا.</div><a class="btn small" href="https://www.google.com/drive/download/" target="_blank" rel="noopener">صفحة التنزيل</a></div>`}
@@ -44,7 +46,8 @@ async function storageDialog() {
 }
 function browserBackupDialog() {
   openDialog(`<h3>النسخة الاحتياطية</h3>
-    <p class="note">في المتصفح بياناتك محفوظة في هذا المتصفح فقط. نزّل تطبيق الماك عشان تحفظها في قوقل درايف.</p>
+    ${cloudSection()}
+    <p class="note">بياناتك محفوظة على هذا الجهاز. وتقدر كمان تاخذ نسخة احتياطية:</p>
     <button class="btn primary" value="export">تنزيل نسخة</button>
     <label class="btn" style="text-align:center;cursor:pointer">استرجاع من ملف<input type="file" accept=".json,application/json" id="restore-file" hidden></label>
     <div class="dlg-actions"><span class="grow"></span><button class="btn" value="cancel">إغلاق</button></div>`, (fd, v) => {

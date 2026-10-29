@@ -1,5 +1,6 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, Tray, nativeImage, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, Tray, nativeImage, screen, safeStorage } = require('electron');
+const http = require('http');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -97,6 +98,39 @@ ipcMain.handle('blob:del', (_e, key) => {
   return true;
 });
 
+/* ---------- Google sign-in: a one-shot local server catches the browser's redirect ---------- */
+let oauthWait = null;
+ipcMain.handle('oauth:listen', () => new Promise((resolve, reject) => {
+  let done;
+  oauthWait = new Promise(r => { done = r; });
+  const server = http.createServer((req, res) => {
+    const u = new URL(req.url, 'http://127.0.0.1');
+    const code = u.searchParams.get('code'), error = u.searchParams.get('error');
+    if (!code && !error) { res.writeHead(404); res.end(); return; }
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(`<!doctype html><html dir="rtl"><body style="font-family:-apple-system,system-ui;text-align:center;padding:80px;background:#f7f7f5;color:#1f2328"><h2>${code ? 'تم تسجيل الدخول ✓' : 'ما تم تسجيل الدخول'}</h2><p>ارجع لتطبيق مدار، وتقدر تسكر هذي الصفحة.</p></body></html>`);
+    done({ code, error }); server.close(); showMain();
+  });
+  server.on('error', reject);
+  server.listen(0, '127.0.0.1', () => resolve(server.address().port));
+  setTimeout(() => { done({ error: 'timeout' }); server.close(); }, 5 * 60 * 1000);
+}));
+ipcMain.handle('oauth:wait', () => oauthWait);
+const secretsFile = () => path.join(app.getPath('userData'), 'secrets.json');
+ipcMain.handle('secret:get', (_e, key) => {
+  try {
+    const all = JSON.parse(fs.readFileSync(secretsFile(), 'utf8'));
+    if (!all[key]) return null;
+    return safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(Buffer.from(all[key], 'base64')) : Buffer.from(all[key], 'base64').toString();
+  } catch { return null; }
+});
+ipcMain.handle('secret:set', (_e, key, value) => {
+  let all = {}; try { all = JSON.parse(fs.readFileSync(secretsFile(), 'utf8')); } catch { /* new */ }
+  if (!value) delete all[key];
+  else all[key] = (safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(value) : Buffer.from(value)).toString('base64');
+  fs.writeFileSync(secretsFile(), JSON.stringify(all), { mode: 0o600 });
+  return true;
+});
 ipcMain.handle('folder:info', () => ({ dataDir: dataDir(), isDefault: !readConfig().dataDir, clouds: cloudFolders() }));
 ipcMain.handle('folder:choose', async (e, suggested) => {
   const win = BrowserWindow.fromWebContents(e.sender);

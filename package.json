@@ -14,9 +14,12 @@
     "start": "electron .",
     "dist": "electron-builder --mac dmg",
     "dist:all": "electron-builder --mac dmg --arm64 --x64",
-    "dist:win": "electron-builder --win nsis --x64"
+    "dist:win": "electron-builder --win nsis --x64",
+    "test": "node test/merge.test.js"
   },
   "devDependencies": {
+    "@capacitor/app": "8.1.0",
+    "@capacitor/browser": "8.0.1",
     "@capacitor/cli": "8.6.0",
     "@capacitor/core": "8.6.0",
     "@capacitor/ios": "8.6.0",
