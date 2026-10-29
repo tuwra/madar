@@ -112,23 +112,25 @@ function streamline(raw, amount, minGap = 0.35) {
   if (raw.length > 1 && Math.hypot(last[0] - prev[0], last[1] - prev[1]) > minGap) out.push([last[0], last[1], last[2]]);
   return out;
 }
+// A stroke is built from a round dab at every point plus a bridge between each pair, all wound the
+// same way, so one nonzero fill is their union. (A single outline around the whole stroke left holes
+// wherever handwriting crossed itself, because the crossing parts cancelled out.)
 function outlinePath(P, radii) {
-  const path = new Path2D(), n = P.length;
-  if (n === 1) { path.arc(P[0][0], P[0][1], Math.max(0.3, radii[0]), 0, Math.PI * 2); return path; }
-  const L = [], R = [], ang = [];
-  for (let i = 0; i < n; i++) {
-    const a = P[Math.max(0, i - 1)], b = P[Math.min(n - 1, i + 1)];
-    let tx = b[0] - a[0], ty = b[1] - a[1]; const len = Math.hypot(tx, ty) || 1; tx /= len; ty /= len;
-    const nx = -ty, ny = tx, r = radii[i];
-    L.push([P[i][0] + nx * r, P[i][1] + ny * r]); R.push([P[i][0] - nx * r, P[i][1] - ny * r]); ang.push(Math.atan2(ny, nx));
+  const path = new Path2D();
+  for (let i = 0; i < P.length; i++) {
+    const r = Math.max(0.05, radii[i]);
+    path.moveTo(P[i][0] + r, P[i][1]); path.arc(P[i][0], P[i][1], r, 0, Math.PI * 2, false);
   }
-  const curve = pts => { for (let i = 1; i < pts.length - 1; i++) path.quadraticCurveTo(pts[i][0], pts[i][1], (pts[i][0] + pts[i + 1][0]) / 2, (pts[i][1] + pts[i + 1][1]) / 2); path.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]); };
-  path.moveTo(L[0][0], L[0][1]);
-  curve(L);
-  path.arc(P[n - 1][0], P[n - 1][1], Math.max(0.05, radii[n - 1]), ang[n - 1], ang[n - 1] - Math.PI, true);
-  curve(R.slice().reverse());
-  path.arc(P[0][0], P[0][1], Math.max(0.05, radii[0]), ang[0] + Math.PI, ang[0], true);
-  path.closePath();
+  for (let i = 1; i < P.length; i++) {
+    const a = P[i - 1], b = P[i], ra = Math.max(0.05, radii[i - 1]), rb = Math.max(0.05, radii[i]);
+    const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy);
+    if (len < 0.01) continue;
+    const nx = -dy / len, ny = dx / len;
+    let q = [[a[0] + nx * ra, a[1] + ny * ra], [b[0] + nx * rb, b[1] + ny * rb], [b[0] - nx * rb, b[1] - ny * rb], [a[0] - nx * ra, a[1] - ny * ra]];
+    let area = 0; for (let k = 0; k < 4; k++) { const [x1, y1] = q[k], [x2, y2] = q[(k + 1) % 4]; area += x1 * y2 - x2 * y1; }
+    if (area < 0) q = q.reverse(); // same direction as the dabs
+    path.moveTo(q[0][0], q[0][1]); path.lineTo(q[1][0], q[1][1]); path.lineTo(q[2][0], q[2][1]); path.lineTo(q[3][0], q[3][1]); path.closePath();
+  }
   return path;
 }
 function penPath(s) {
