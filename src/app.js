@@ -177,17 +177,6 @@ function dueLabel(t) {
 }
 const listOf = id => state.lists.find(l => l.id === id) || state.lists[0];
 
-function taskRow(t, { showList = true } = {}) {
-  const l = listOf(t.listId);
-  const late = t.due && !t.done && t.due < todayStr();
-  return `<div class="task ${t.done ? 'done' : ''}" data-task="${t.id}">
-    <button class="check p${t.priority}" data-act="toggle" aria-label="إنجاز"></button>
-    <div class="task-body" data-act="edit">
-      <div class="task-title">${esc(t.title)}</div>
-      <div class="task-meta">${t.due ? `<span class="chip ${late ? 'late' : ''}">${dueLabel(t)}</span>` : ''}${showList && l.id !== 'inbox' ? `<span class="chip"><span class="dot" style="--c:${l.color}"></span>${esc(l.name)}</span>` : ''}${t.notes ? '<span class="chip">📝</span>' : ''}</div>
-    </div>
-  </div>`;
-}
 function quickAdd({ due = '', list = '', placeholder = 'أضف مهمة…' } = {}) {
   return `<form class="quick" data-quick data-due="${due}" data-list="${list}">
     <input name="q" autocomplete="off" placeholder="${placeholder}">
@@ -195,145 +184,6 @@ function quickAdd({ due = '', list = '', placeholder = 'أضف مهمة…' } = 
   </form>`;
 }
 const taskList = (tasks, opt) => tasks.length ? tasks.map(t => taskRow(t, opt)).join('') : '';
-
-/* ---------- view: today ---------- */
-function renderToday() {
-  const td = todayStr();
-  const h = new Date().getHours();
-  const late = state.tasks.filter(t => !t.done && t.due && t.due < td).sort(byTask);
-  const today = state.tasks.filter(t => t.due === td).sort((a, b) => a.done - b.done || byTask(a, b));
-  const evs = state.events.filter(e => e.date === td).sort((a, b) => (a.start || '').localeCompare(b.start || ''));
-  const pages = [...state.pages].sort((a, b) => b.updated - a.updated).slice(0, 3);
-  view.innerHTML = `<div class="wrap">
-    <div class="page-head"><div>
-      <h1>${h < 12 ? 'صباح الخير' : 'مساء الخير'} ☀️</h1>
-      <div class="sub">${fmt(td, { weekday: 'long', day: 'numeric', month: 'long' })} · ${hijri(td)}</div>
-    </div></div>
-    ${quickAdd({ due: td, placeholder: 'وش بتسوي اليوم؟' })}
-    ${late.length ? `<h2>متأخرة</h2>${taskList(late)}` : ''}
-    <h2>مهام اليوم</h2>
-    ${taskList(today) || '<div class="empty">ما عندك مهام اليوم. استمتع بيومك ✨</div>'}
-    <h2>مواعيد اليوم <button class="btn small ghost" data-act="add-event" data-day="${td}">+ موعد</button></h2>
-    ${evs.length ? evs.map(agendaItem).join('') : '<div class="empty">ما فيه مواعيد اليوم</div>'}
-    <h2>آخر الملاحظات</h2>
-    <div class="cards">
-      ${pages.map(p => `<button class="card" data-act="open-page" data-page="${p.id}"><span class="big">${p.icon}</span><b>${esc(p.title || 'بدون عنوان')}</b><span class="muted">${blockPreview(p)}</span></button>`).join('')}
-      <button class="card" data-act="new-page"><span class="big">＋</span><b>صفحة جديدة</b></button>
-    </div>
-  </div>`;
-}
-function agendaItem(e) {
-  return `<div class="agenda-item" data-act="event" data-ev="${e.id}" style="--c:${e.color}">
-    <span class="bar"></span><span class="time">${e.start ? `${e.start}${e.end ? ' – ' + e.end : ''}` : 'طوال اليوم'}</span><span>${esc(e.title)}</span></div>`;
-}
-
-/* ---------- view: tasks ---------- */
-function renderTasks() {
-  const td = todayStr();
-  const open = state.tasks.filter(t => !t.done);
-  const smart = [
-    { f: 'today', name: 'اليوم', icon: '☀️', n: open.filter(t => t.due && t.due <= td).length },
-    { f: 'upcoming', name: 'الأيام القادمة', icon: '🗓️', n: open.filter(t => t.due && t.due > td && t.due <= addDays(td, 7)).length },
-    { f: 'all', name: 'كل المهام', icon: '📋', n: open.length },
-    { f: 'done', name: 'المكتملة', icon: '✅', n: '' },
-  ];
-  const f = ui.taskFilter;
-  const list = state.lists.find(l => l.id === f);
-  if (!list && !smart.some(s => s.f === f)) ui.taskFilter = 'today';
-
-  let title, body, addOpts;
-  if (f === 'today') {
-    title = 'اليوم';
-    const late = open.filter(t => t.due && t.due < td).sort(byTask);
-    const now = state.tasks.filter(t => t.due === td).sort((a, b) => a.done - b.done || byTask(a, b));
-    body = (late.length ? `<h2>متأخرة</h2>${taskList(late)}<h2>اليوم</h2>` : '') + (taskList(now) || '<div class="empty">ما فيه مهام لليوم</div>');
-    addOpts = { due: td };
-  } else if (f === 'upcoming') {
-    title = 'الأيام القادمة';
-    body = '';
-    for (let i = 1; i <= 7; i++) {
-      const d = addDays(td, i);
-      const ts = open.filter(t => t.due === d).sort(byTask);
-      body += `<h2>${i === 1 ? 'غداً' : fmt(d, { weekday: 'long' })} · ${fmt(d, { day: 'numeric', month: 'short' })}</h2>${taskList(ts) || '<div class="hint" style="padding:4px 12px">—</div>'}`;
-    }
-    addOpts = { due: addDays(td, 1) };
-  } else if (f === 'all') {
-    title = 'كل المهام';
-    body = taskList(open.sort(byTask)) || '<div class="empty">خلصت كل شي 🎉</div>';
-    addOpts = {};
-  } else if (f === 'done') {
-    title = 'المكتملة';
-    const d = state.tasks.filter(t => t.done).sort((a, b) => b.doneAt - a.doneAt);
-    body = taskList(d) || '<div class="empty">ما فيه مهام مكتملة بعد</div>';
-    addOpts = null;
-  } else {
-    title = `<span class="dot" style="--c:${list.color};width:12px;height:12px"></span> ${esc(list.name)}`;
-    const ts = state.tasks.filter(t => t.listId === list.id);
-    const o = ts.filter(t => !t.done).sort(byTask), d = ts.filter(t => t.done).sort((a, b) => b.doneAt - a.doneAt);
-    body = (taskList(o, { showList: false }) || '<div class="empty">القائمة فاضية</div>') +
-      (d.length ? `<h2><button class="btn small ghost" data-act="toggle-done">${ui.showDone ? '▾' : '◂'} المكتملة (${d.length})</button></h2>${ui.showDone ? taskList(d, { showList: false }) : ''}` : '');
-    addOpts = { list: list.id };
-  }
-
-  view.innerHTML = `<div class="split">
-    <aside class="side">
-      ${smart.map(s => `<button class="side-item ${f === s.f ? 'active' : ''}" data-act="filter" data-f="${s.f}"><span>${s.icon}</span>${s.name}<span class="n">${s.n || ''}</span></button>`).join('')}
-      <div class="side-label">القوائم</div>
-      ${state.lists.map(l => `<button class="side-item ${f === l.id ? 'active' : ''}" data-act="filter" data-f="${l.id}"><span class="dot" style="--c:${l.color}"></span>${esc(l.name)}<span class="n">${open.filter(t => t.listId === l.id).length || ''}</span></button>`).join('')}
-      <button class="side-item" data-act="add-list" style="color:var(--muted)">＋ قائمة جديدة</button>
-    </aside>
-    <section>
-      <div class="page-head"><h1>${title}</h1>${list && list.id !== 'inbox' ? '<button class="btn small" data-act="edit-list">تعديل القائمة</button>' : ''}</div>
-      ${addOpts ? quickAdd(addOpts) : ''}
-      <div style="margin-top:10px">${body}</div>
-    </section>
-  </div>`;
-}
-
-/* ---------- view: calendar ---------- */
-function renderCalendar() {
-  const td = todayStr();
-  const sel = ui.calDay;
-  const m = ui.calMonth || sel.slice(0, 7);
-  ui.calMonth = m;
-  const first = parseYmd(m + '-01');
-  const start = new Date(first); start.setDate(1 - first.getDay());
-  let cells = '';
-  for (let i = 0; i < 42; i++) {
-    const d = new Date(start); d.setDate(start.getDate() + i);
-    const ds = ymd(d);
-    const evs = state.events.filter(e => e.date === ds).sort((a, b) => (a.start || '').localeCompare(b.start || ''));
-    const ts = state.tasks.filter(t => t.due === ds).sort(byTask);
-    const items = [
-      ...evs.map(e => `<div class="ev" style="--c:${e.color}" data-act="event" data-ev="${e.id}">${e.start ? e.start + ' ' : ''}${esc(e.title)}</div>`),
-      ...ts.map(t => `<div class="ev t ${t.done ? 'done' : ''}" style="--c:${listOf(t.listId).color}" data-act="edit" data-task="${t.id}">${esc(t.title)}</div>`),
-    ];
-    cells += `<div class="day ${ds.slice(0, 7) !== m ? 'other' : ''} ${ds === td ? 'today' : ''} ${ds === sel ? 'sel' : ''}" data-act="day" data-day="${ds}">
-      <span class="day-n">${d.getDate()}</span>${items.slice(0, 3).join('')}${items.length > 3 ? `<span class="more">+${items.length - 3}</span>` : ''}</div>`;
-  }
-  const evs = state.events.filter(e => e.date === sel).sort((a, b) => (a.start || '').localeCompare(b.start || ''));
-  const ts = state.tasks.filter(t => t.due === sel).sort((a, b) => a.done - b.done || byTask(a, b));
-  view.innerHTML = `<div class="cal-wrap">
-    <section>
-      <div class="cal-head">
-        <h1>${fmt(m + '-01', { month: 'long', year: 'numeric' })}</h1>
-        <button class="btn" data-act="cal-today">اليوم</button>
-        <button class="btn" data-act="cal-move" data-n="-1" aria-label="الشهر السابق">›</button>
-        <button class="btn" data-act="cal-move" data-n="1" aria-label="الشهر التالي">‹</button>
-      </div>
-      <div class="grid">${DOW_SHORT.map(d => `<div class="dow">${d}</div>`).join('')}${cells}</div>
-    </section>
-    <aside class="panel">
-      <h3>${fmt(sel, { weekday: 'long', day: 'numeric', month: 'long' })}</h3>
-      <div class="sub" style="font-size:13px">${hijri(sel)}</div>
-      <h2 style="margin-top:16px">المواعيد <button class="btn small ghost" data-act="add-event" data-day="${sel}">+ موعد</button></h2>
-      ${evs.length ? evs.map(agendaItem).join('') : '<div class="hint" style="padding:0 12px">ما فيه مواعيد</div>'}
-      <h2>المهام</h2>
-      ${taskList(ts)}
-      ${quickAdd({ due: sel, placeholder: 'مهمة لهذا اليوم…' }).replace(/<div class="hint">.*?<\/div>/, '')}
-    </aside>
-  </div>`;
-}
 
 /* ---------- dialogs ---------- */
 const dlg = $('#dlg');
@@ -366,8 +216,8 @@ function taskDialog(id) {
     save(); render();
   });
 }
-function eventDialog(id, day) {
-  const ev = id ? state.events.find(x => x.id === id) : { title: '', date: day || todayStr(), start: '09:00', end: '10:00', color: COLORS[1] };
+function eventDialog(id, day, start = '09:00', end = '10:00') {
+  const ev = id ? state.events.find(x => x.id === id) : { title: '', date: day || todayStr(), start, end, color: COLORS[1] };
   openDialog(`<h3>${id ? 'تعديل الموعد' : 'موعد جديد'}</h3>
     <input name="title" class="title-input" value="${esc(ev.title)}" placeholder="عنوان الموعد" required autofocus>
     <label>التاريخ<input type="date" name="date" value="${ev.date}" required></label>
@@ -466,7 +316,87 @@ window.trayApi = {
     return this.summary();
   },
   open(v) { if (ui.view !== v || v === 'ink') go(v, v === 'ink' ? { notebookId: null } : {}); },
+
+  /* calendar tab */
+  month(m) {
+    const td = todayStr(); m ||= td.slice(0, 7);
+    const first = parseYmd(m + '-01'), start = new Date(first); start.setDate(1 - first.getDay());
+    const days = [];
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(start); d.setDate(start.getDate() + i); const ds = ymd(d);
+      const dots = [...state.events.filter(e => e.date === ds).map(e => e.color), ...state.tasks.filter(t => t.due === ds && !t.done).map(t => listOf(t.listId).color)].slice(0, 3);
+      days.push({ ds, n: d.getDate(), other: ds.slice(0, 7) !== m, today: ds === td, dots });
+    }
+    const prev = new Date(first); prev.setMonth(prev.getMonth() - 1);
+    const next = new Date(first); next.setMonth(next.getMonth() + 1);
+    return { m, label: fmt(m + '-01', { month: 'long', year: 'numeric' }), dow: DOW_SHORT, days, prev: ymd(prev).slice(0, 7), next: ymd(next).slice(0, 7) };
+  },
+  day(ds) {
+    const td = todayStr();
+    return {
+      ds, label: ds === td ? 'اليوم' : fmt(ds, { weekday: 'long', day: 'numeric', month: 'long' }), hijri: hijri(ds),
+      events: state.events.filter(e => e.date === ds).sort((a, b) => (a.start || '').localeCompare(b.start || '')).map(e => ({ id: e.id, title: e.title, color: e.color, time: e.start ? `${e.start}${e.end ? ' – ' + e.end : ''}` : 'طوال اليوم' })),
+      tasks: state.tasks.filter(t => t.due === ds).sort((a, b) => a.done - b.done || byTask(a, b)).map(t => ({ id: t.id, title: t.title, done: t.done, priority: t.priority, meta: t.time || '' })),
+    };
+  },
+  addOn(ds, text) {
+    // "اجتماع 10:00" with a time becomes an appointment, anything else a task for that day
+    const p = parseQuick(text, { due: ds });
+    if (p.time && !/!/.test(text)) {
+      const [h, mi] = p.time.split(':').map(Number);
+      state.events.push({ id: uid(), title: p.title, date: p.due || ds, start: p.time, end: `${pad(Math.min(23, h + 1))}:${pad(mi)}`, color: COLORS[1] });
+    } else state.tasks.push({ ...newTask(p.title, 'inbox', p.due || ds, p.priority), time: p.time });
+    flush(); this.refreshView();
+    return this.day(ds);
+  },
+  toggleOn(ds, id) { this.toggle(id); return this.day(ds); },
+
+  /* notes tab */
+  pages(q = '') {
+    q = q.trim();
+    return [...state.pages].sort((a, b) => b.updated - a.updated)
+      .filter(p => !q || p.title.includes(q) || p.blocks.some(b => textOf(b).includes(q)))
+      .slice(0, 40).map(p => ({ id: p.id, icon: p.icon, title: p.title || 'بدون عنوان', preview: blockPreview(p).replace(/&[a-z#0-9]+;/g, ' '), when: relTime(p.updated) }));
+  },
+  page(id) {
+    const p = state.pages.find(x => x.id === id); if (!p) return null;
+    return { id: p.id, icon: p.icon, title: p.title || 'بدون عنوان', blocks: p.blocks.map(b => ({ id: b.id, type: b.type, text: textOf(b), checked: !!b.checked, lang: b.lang })) };
+  },
+  toggleBlock(pid, bid) {
+    const p = state.pages.find(x => x.id === pid), b = p?.blocks.find(x => x.id === bid);
+    if (b && b.type === 'todo') { b.checked = !b.checked; p.updated = Date.now(); flush(); if (ui.view === 'notes' && curPage === p) renderBlocks(); }
+    return this.page(pid);
+  },
+  appendToPage(pid, text) {
+    const p = state.pages.find(x => x.id === pid); if (!p || !text.trim()) return this.page(pid);
+    const todo = /^\[ ?\]\s*/.test(text);
+    p.blocks.push(blk(todo ? 'todo' : 'p', esc(text.replace(/^\[ ?\]\s*/, '')))); p.updated = Date.now(); flush();
+    if (ui.view === 'notes' && curPage === p) renderBlocks();
+    return this.page(pid);
+  },
+  newNote(text) {
+    const [first, ...rest] = text.trim().split('\n');
+    const p = blankPage(); p.title = first.slice(0, 80);
+    p.blocks = rest.length ? rest.map(l => blk('p', esc(l))) : [blk('p')];
+    state.pages.push(p); flush();
+    if (ui.view === 'notes') renderPageList();
+    return p.id;
+  },
+  openPage(id) { go('notes', { pageId: id }); },
+
+  /* notebooks tab */
+  notebooks() {
+    return [...state.notebooks].sort((a, b) => (b.opened || 0) - (a.opened || 0)).slice(0, 12)
+      .map(n => ({ id: n.id, name: n.name, color: n.color, cover: n.cover || null, pages: n.pages.length, kind: n.kind, page: (n.last?.page || 0) + 1, land: pageW(n.pages[0] || {}) > pageH(n.pages[0] || {}) }));
+  },
+  openNotebook(id) { A['open-nb']({ dataset: { nb: id } }); if (ui.view !== 'ink') go('ink'); },
 };
+function relTime(t) {
+  const m = Math.round((Date.now() - t) / 60000);
+  if (m < 1) return 'الحين'; if (m < 60) return `قبل ${m} د`;
+  const h = Math.round(m / 60); if (h < 24) return `قبل ${h} س`;
+  const d = Math.round(h / 24); return d === 1 ? 'أمس' : d < 30 ? `قبل ${d} يوم` : fmt(ymd(new Date(t)), { day: 'numeric', month: 'short' });
+}
 
 function toast(msg, ms = 2600) {
   let t = $('#toast');

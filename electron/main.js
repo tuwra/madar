@@ -150,7 +150,7 @@ ipcMain.handle('ask', async (e, { message, detail, buttons }) => {
 });
 
 /* ---------- window ---------- */
-let mainWin = null, tray = null, trayWin = null, quitting = false;
+let mainWin = null, tray = null, trayWin = null, quitting = false, trayReady = false;
 function createWindow() {
   const win = mainWin = new BrowserWindow({
     width: 1320, height: 860, minWidth: 380, minHeight: 520,
@@ -160,7 +160,8 @@ function createWindow() {
   win.once('ready-to-show', () => { if (!process.env.MADAR_HIDDEN) win.show(); });
   // closing the window keeps Madar running in the menu bar, like other Mac apps
   win.on('close', e => { if (!quitting && process.platform === 'darwin') { e.preventDefault(); win.hide(); } });
-  win.on('closed', () => { if (mainWin === win) mainWin = null; });
+  win.on('closed', () => { if (mainWin === win) { mainWin = null; trayReady = false; } });
+  win.webContents.on('did-start-loading', () => { trayReady = false; });
   // links open in the default browser, never inside the app
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:')) { e.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url); } });
@@ -185,24 +186,30 @@ function createWindow() {
       if (trayWin && process.env.MADAR_SHOT) {
         const sum = await askMain('window.trayApi.summary()');
         console.log('TRAY', JSON.stringify({ title: tray.getTitle(), open: sum.open, tasks: sum.tasks.length }));
-        trayWin.setPosition(200, 60); trayWin.showInactive(); trayWin.webContents.send('tray:refresh');
-        await new Promise(r => setTimeout(r, 1200));
-        fs.writeFileSync(process.env.MADAR_SHOT, (await trayWin.webContents.capturePage()).toPNG());
+        trayWin.setPosition(200, 60); trayWin.showInactive();
+        for (const tab of ['today', 'cal', 'notes', 'ink']) {
+          await trayWin.webContents.executeJavaScript(`setTab(${JSON.stringify(tab)})`);
+          await new Promise(r => setTimeout(r, 900));
+          fs.writeFileSync(process.env.MADAR_SHOT.replace('.png', `-${tab}.png`), (await trayWin.webContents.capturePage()).toPNG());
+        }
       }
-      quitting = true; app.quit();
+      quitting = true; app.quit(); setTimeout(() => app.exit(0), 1500);
     });
   }
 }
 
 /* ---------- menu bar ---------- */
-const TRAY_W = 340, TRAY_H = 470;
+const TRAY_W = 360, TRAY_H = 540;
 async function askMain(code) {
   if (!mainWin) createWindow();
   const wc = mainWin.webContents;
   if (wc.isLoading()) await new Promise(r => wc.once('did-finish-load', r));
-  for (let i = 0; i < 20; i++) {
-    if (await wc.executeJavaScript('!!(window.trayApi && window.state)')) break;
-    await new Promise(r => setTimeout(r, 100));
+  // `state` is a top-level let in the app, so it is not a property of window
+  if (!trayReady) {
+    for (let i = 0; i < 50 && !trayReady; i++) {
+      trayReady = await wc.executeJavaScript("!!(window.trayApi && typeof state !== 'undefined' && state)");
+      if (!trayReady) await new Promise(r => setTimeout(r, 100));
+    }
   }
   return wc.executeJavaScript(code);
 }
@@ -220,6 +227,7 @@ function createTray() {
     webPreferences: { preload: path.join(__dirname, 'tray-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false },
   });
   trayWin.loadFile(path.join(__dirname, '..', 'src', 'tray.html'));
+  if (process.env.MADAR_SELFTEST) trayWin.webContents.on('console-message', (_e, level, msg) => { if (level >= 2) console.log('[tray]', msg); });
   trayWin.on('blur', () => trayWin.hide());
   const toggle = () => {
     if (trayWin.isVisible()) return trayWin.hide();
@@ -248,6 +256,17 @@ ipcMain.handle('tray:summary', () => askMain('window.trayApi.summary()'));
 ipcMain.handle('tray:toggle', (_e, id) => askMain(`window.trayApi.toggle(${JSON.stringify(String(id))})`));
 ipcMain.handle('tray:add', (_e, text) => askMain(`window.trayApi.add(${JSON.stringify(String(text))})`));
 ipcMain.handle('tray:open', (_e, view) => { trayWin?.hide(); showMain(String(view)); });
+const TRAY_CALLS = ['summary', 'toggle', 'add', 'month', 'day', 'addOn', 'toggleOn', 'pages', 'page', 'toggleBlock', 'appendToPage', 'newNote'];
+const TRAY_OPENS = ['openPage', 'openNotebook'];
+ipcMain.handle('tray:call', (_e, name, args = []) => {
+  if (!TRAY_CALLS.includes(name) && name !== 'notebooks') throw new Error('not allowed');
+  return askMain(`window.trayApi[${JSON.stringify(name)}](...${JSON.stringify(args.map(String))})`);
+});
+ipcMain.handle('tray:openItem', (_e, name, id) => {
+  if (!TRAY_OPENS.includes(name)) throw new Error('not allowed');
+  trayWin?.hide(); showMain();
+  return askMain(`window.trayApi[${JSON.stringify(name)}](${JSON.stringify(String(id))})`);
+});
 ipcMain.handle('tray:hide', () => trayWin?.hide());
 ipcMain.on('state:changed', () => { updateTrayTitle(); if (trayWin?.isVisible()) trayWin.webContents.send('tray:refresh'); });
 

@@ -82,30 +82,80 @@ const childrenOf = id => state.pages.filter(p => (p.parentId || null) === id);
 function ancestors(p) { const out = []; let c = p; while (c?.parentId) { c = state.pages.find(x => x.id === c.parentId); if (c) out.unshift(c); } return out; }
 
 /* ---------- view ---------- */
+/* ready-made pages */
+const NOTE_TEMPLATES = {
+  meeting: ['🤝', 'اجتماع', 'الموضوع، الحضور، النقاط والمهام', () => [blk('callout', 'التاريخ: ' + fmt(todayStr(), { weekday: 'long', day: 'numeric', month: 'long' })), blk('h2', 'الحضور'), blk('bullet'), blk('h2', 'النقاط'), blk('bullet'), blk('h2', 'المهام القادمة'), blk('todo')]],
+  journal: ['📔', 'يومياتي', 'كيف كان يومك، وش تعلمت، وش ممتن له', () => [blk('h3', fmt(todayStr(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })), blk('h2', 'كيف كان يومي'), blk('p'), blk('h2', 'ممتن لـ'), blk('num'), blk('h2', 'وش تعلمت'), blk('p')]],
+  project: ['🚀', 'مشروع', 'الهدف، الخطوات، المراحل والروابط', () => [blk('callout', 'الهدف: '), blk('h2', 'الخطوات'), blk('todo'), blk('todo'), blk('h2', 'المراحل'), Object.assign(blk('table'), { rows: [['المرحلة', 'الموعد', 'الحالة'], ['', '', ''], ['', '', '']] }), blk('h2', 'روابط وملفات'), blk('bullet')]],
+  study: ['🎓', 'مذاكرة', 'ملخص درس بأسئلة ومراجعة', () => [blk('h2', 'الأفكار الرئيسية'), blk('bullet'), blk('h2', 'تعريفات'), blk('toggle', 'مصطلح'), blk('h2', 'أسئلة للمراجعة'), blk('todo'), blk('h2', 'الملخص'), blk('quote')]],
+  reading: ['📚', 'قائمة قراءة', 'كتب تبي تقرأها وتقييمها', () => [Object.assign(blk('table'), { rows: [['الكتاب', 'المؤلف', 'الحالة', 'التقييم'], ['', '', 'أبي أقرأه', ''], ['', '', '', '']] }), blk('h2', 'اقتباسات حبيتها'), blk('quote')]],
+  week: ['🗓️', 'خطة الأسبوع', 'أهداف الأسبوع وكل يوم', () => [blk('h2', 'أهداف الأسبوع'), blk('todo'), blk('todo'), ...DOW.flatMap(d => [blk('h3', d), blk('todo')])]],
+};
+function pageFromTemplate(kind, parentId = null) {
+  const [icon, name, , make] = NOTE_TEMPLATES[kind];
+  const p = blankPage(parentId); p.icon = icon; p.title = name; p.blocks = make();
+  return p;
+}
+function notesSide() {
+  const favs = state.pages.filter(p => p.fav);
+  return `<aside class="side">
+      <input type="search" id="page-search" placeholder="ابحث في الملاحظات…" value="${esc(ui.pageSearch)}">
+      <button class="side-item ${ui.pageId === 'home' ? 'active' : ''}" data-act="notes-home"><span>🏠</span>الرئيسية</button>
+      ${favs.length ? `<div class="side-label">المفضلة</div>${favs.map(p => `<button class="side-item ${p.id === ui.pageId ? 'active' : ''}" data-act="open-page" data-page="${p.id}"><span>${p.icon}</span><span class="page-item-title">${esc(p.title || 'بدون عنوان')}</span></button>`).join('')}` : ''}
+      <div class="side-label">الصفحات</div>
+      <div class="page-list"></div>
+      <button class="side-item" data-act="new-page" style="color:var(--muted)">＋ صفحة جديدة</button>
+    </aside>`;
+}
+const pageCard = p => `<button class="pcard" data-act="open-page" data-page="${p.id}">
+    <span class="pcard-cover" style="${p.cover ? coverStyle(p.cover) : `background:${COVERS[(p.id.charCodeAt(0) + p.id.charCodeAt(1)) % COVERS.length]}`}"></span>
+    <span class="pcard-icon">${p.icon}</span>
+    <b>${esc(p.title || 'بدون عنوان')}</b>
+    <small>${blockPreview(p) || 'صفحة فاضية'}</small>
+    <time>${relTime(p.updated)}${p.fav ? ' · ★' : ''}</time>
+  </button>`;
+function renderNotesHome() {
+  ui.expanded ||= {};
+  const recent = [...state.pages].sort((a, b) => b.updated - a.updated).slice(0, 12), favs = state.pages.filter(p => p.fav);
+  for (const p of state.pages) if (p.cover?.img) blobUrl(p.cover.img);
+  view.innerHTML = `<div class="split notes-split">${notesSide()}
+    <section class="notes-home">
+      <div class="page-head"><div><h1>الملاحظات</h1><div class="sub">${state.pages.length} صفحة</div></div><button class="btn primary" data-act="new-page">صفحة جديدة</button></div>
+      <h2>ابدأ من قالب</h2>
+      <div class="tpl-cards">${Object.entries(NOTE_TEMPLATES).map(([k, [icon, name, desc]]) => `<button class="tcard" data-act="new-from-tpl" data-t="${k}"><span>${icon}</span><b>${name}</b><small>${desc}</small></button>`).join('')}</div>
+      ${favs.length ? `<h2>المفضلة</h2><div class="pcards">${favs.map(pageCard).join('')}</div>` : ''}
+      <h2>آخر التعديلات</h2>
+      <div class="pcards">${recent.map(pageCard).join('')}</div>
+    </section></div>`;
+  renderPageList();
+  $('#page-search').addEventListener('input', e => { ui.pageSearch = e.target.value; renderPageList(); });
+}
 function renderNotes() {
+  if (ui.pageId === 'home') return renderNotesHome();
   if (!state.pages.length) state.pages.push(blankPage());
   curPage = state.pages.find(p => p.id === ui.pageId) || [...state.pages].sort((a, b) => b.updated - a.updated)[0];
   ui.pageId = curPage.id;
   ui.expanded ||= {};
   for (const a of ancestors(curPage)) ui.expanded[a.id] = true;
   const crumbs = ancestors(curPage);
+  const words = curPage.blocks.map(textOf).join(' ').split(/\s+/).filter(Boolean).length;
+  const isEmpty = !curPage.title && curPage.blocks.length <= 1 && !curPage.blocks.some(textOf);
   view.innerHTML = `<div class="split notes-split">
-    <aside class="side">
-      <input type="search" id="page-search" placeholder="ابحث في الملاحظات…" value="${esc(ui.pageSearch)}">
-      <div class="page-list"></div>
-      <button class="side-item" data-act="new-page" style="color:var(--muted)">＋ صفحة جديدة</button>
-    </aside>
+    ${notesSide()}
     <section class="doc-wrap">
       ${curPage.cover ? `<div class="cover" style="${coverStyle(curPage.cover)}"><div class="cover-tools"><button class="btn small" data-act="cover">تغيير الغلاف</button><button class="btn small" data-act="cover-remove">إزالة</button></div></div>` : ''}
       <div class="doc">
         <div class="doc-top">
           <div class="crumbs">${crumbs.map(c => `<button class="crumb" data-act="open-page" data-page="${c.id}">${c.icon} ${esc(c.title || 'بدون عنوان')}</button><span>/</span>`).join('')}</div>
           <span class="grow"></span>
+          <span class="doc-meta">${words} كلمة · ${relTime(curPage.updated)}</span>
+          <button class="btn small ghost fav-btn ${curPage.fav ? 'on' : ''}" data-act="page-fav" title="المفضلة">${curPage.fav ? '★' : '☆'}</button>
           ${curPage.cover ? '' : '<button class="btn small ghost" data-act="cover">🖼️ غلاف</button>'}
           <button class="btn small ghost danger" data-act="del-page">حذف الصفحة</button>
         </div>
         <button class="page-icon" data-act="icon" title="غيّر الأيقونة">${curPage.icon}</button>
         <div class="doc-title" contenteditable="true" data-ph="بدون عنوان" spellcheck="false">${esc(curPage.title)}</div>
+        ${isEmpty ? `<div class="tpl-inline"><span class="hint">ابدأ بقالب:</span>${Object.entries(NOTE_TEMPLATES).map(([k, [icon, name]]) => `<button class="chip-btn" data-act="apply-tpl" data-t="${k}">${icon} ${name}</button>`).join('')}</div>` : ''}
         <div class="blocks"></div>
         <div class="doc-end" data-act="doc-end"></div>
         <div class="doc-hint">اكتب <code>/</code> لكل الأوامر · <code># </code> عنوان · <code>- </code> قائمة · <code>1. </code> مرقمة · <code>[] </code> مهمة · <code>&gt; </code> اقتباس · <code>\`\`\`</code> كود · <code>---</code> فاصل · حدد نص عشان تنسّقه</div>
@@ -687,13 +737,17 @@ async function linkDriveFile(b, empty) {
 Object.assign(A, {
   'open-page': a => { hideFmt(); go('notes', { pageId: a.dataset.page }); },
   'new-page': () => { const p = blankPage(); state.pages.push(p); save(); go('notes', { pageId: p.id, pageSearch: '' }); },
+  'notes-home': () => go('notes', { pageId: 'home' }),
+  'new-from-tpl': a => { const p = pageFromTemplate(a.dataset.t); state.pages.push(p); save(); go('notes', { pageId: p.id }); },
+  'apply-tpl': a => { const t = pageFromTemplate(a.dataset.t); Object.assign(curPage, { icon: t.icon, title: t.title, blocks: t.blocks }); touchPage(); render(); },
+  'page-fav': () => { curPage.fav = !curPage.fav; touchPage(); render(); toast(curPage.fav ? 'انضافت للمفضلة' : 'انشالت من المفضلة'); },
   'new-subpage': a => { const p = blankPage(a.dataset.page); state.pages.push(p); ui.expanded[a.dataset.page] = true; save(); go('notes', { pageId: p.id }); },
   'page-expand': a => { ui.expanded[a.dataset.page] = !ui.expanded[a.dataset.page]; renderPageList(); },
   'del-page': () => {
     const pg = curPage;
     const all = [pg.id]; for (let k = 0; k < all.length; k++) childrenOf(all[k]).forEach(c => all.push(c.id));
     ask(`تحذف «${esc(pg.title || 'بدون عنوان')}»${all.length > 1 ? ` و ${all.length - 1} صفحة فرعية` : ''}؟`, 'حذف', () => {
-      state.pages = state.pages.filter(p => !all.includes(p.id)); ui.pageId = pg.parentId; save(); render();
+      state.pages = state.pages.filter(p => !all.includes(p.id)); ui.pageId = pg.parentId || 'home'; save(); render();
     });
   },
   icon: () => openDialog(`<h3>اختر أيقونة</h3><div class="emoji-grid">${ICONS.map(i => `<button value="${i}">${i}</button>`).join('')}</div>`, (fd, v) => { if (ICONS.includes(v)) { curPage.icon = v; touchPage(); render(); } }),
