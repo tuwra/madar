@@ -10,7 +10,8 @@
     "postinstall": "node scripts/vendor.js",
     "start": "electron .",
     "dist": "electron-builder --mac dmg",
-    "dist:all": "electron-builder --mac dmg --arm64 --x64"
+    "dist:all": "electron-builder --mac dmg --arm64 --x64",
+    "dist:win": "electron-builder --win nsis --x64"
   },
   "devDependencies": {
     "@fontsource/ibm-plex-sans-arabic": "5.3.0",
@@ -45,6 +46,24 @@
     "dmg": {
       "title": "Madar ${version}",
       "artifactName": "Madar-${version}-${arch}.${ext}"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "artifactName": "Madar-Setup-${version}.${ext}",
+      "shortcutName": "Madar",
+      "uninstallDisplayName": "Madar"
     }
   },
   "repository": {

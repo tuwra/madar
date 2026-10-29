@@ -129,3 +129,6 @@ footer button { color: var(--accent); font-weight: 500; display: flex; align-ite
 footer button svg { width: 14px; height: 14px; }
 .hint { font-size: 11.5px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+.win .tray { background: #f6f6f8; border: 1px solid rgba(0,0,0,.12); }
+@media (prefers-color-scheme: dark) { .win .tray { background: #202022; border-color: rgba(255,255,255,.12); } }

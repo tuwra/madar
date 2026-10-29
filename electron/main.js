@@ -3,6 +3,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell, Menu, Tray, nativeImage, scr
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const IS_MAC = process.platform === 'darwin', IS_WIN = process.platform === 'win32';
 
 app.setName('Madar');
 
@@ -54,6 +55,19 @@ function cloudFolders() {
       out.push({ kind, name, path: target });
     }
   } catch { /* no CloudStorage folder */ }
+  if (IS_WIN) {
+    for (const letter of 'DEFGHIJKLMNOPQRSTUVWXYZ') {
+      for (const inner of ['My Drive', 'محرّكي', 'ملفاتي', 'Mi unidad']) {
+        const p = `${letter}:\\${inner}`;
+        try { if (fs.existsSync(p)) { out.push({ kind: 'google', name: 'Google Drive', path: p }); break; } } catch { /* no such drive */ }
+      }
+    }
+    const legacy = path.join(os.homedir(), 'Google Drive');
+    if (fs.existsSync(legacy) && !out.some(c => c.kind === 'google')) out.push({ kind: 'google', name: 'Google Drive', path: legacy });
+    if (process.env.OneDrive && fs.existsSync(process.env.OneDrive)) out.push({ kind: 'onedrive', name: 'OneDrive', path: process.env.OneDrive });
+    for (const [kind, dir] of [['icloud', 'iCloudDrive'], ['dropbox', 'Dropbox']]) { const p = path.join(os.homedir(), dir); if (fs.existsSync(p)) out.push({ kind, name: dir, path: p }); }
+    return out;
+  }
   const icloud = path.join(os.homedir(), 'Library', 'Mobile Documents', 'com~apple~CloudDocs');
   if (fs.existsSync(icloud)) out.push({ kind: 'icloud', name: 'iCloud Drive', path: icloud });
   return out;
@@ -154,12 +168,14 @@ let mainWin = null, tray = null, trayWin = null, quitting = false, trayReady = f
 function createWindow() {
   const win = mainWin = new BrowserWindow({
     width: 1320, height: 860, minWidth: 380, minHeight: 520,
-    title: 'مدار', backgroundColor: '#f7f7f5', show: false,
+    title: 'مدار', backgroundColor: '#f7f7f5', show: false, autoHideMenuBar: IS_WIN,
+    icon: IS_WIN ? path.join(__dirname, 'icon.png') : undefined,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false },
   });
   win.once('ready-to-show', () => { if (!process.env.MADAR_HIDDEN) win.show(); });
   // closing the window keeps Madar running in the menu bar, like other Mac apps
-  win.on('close', e => { if (!quitting && process.platform === 'darwin') { e.preventDefault(); win.hide(); } });
+  // closing the window keeps Madar running next to the clock (menu bar on Mac, tray on Windows)
+  win.on('close', e => { if (!quitting && tray) { e.preventDefault(); win.hide(); } });
   win.on('closed', () => { if (mainWin === win) { mainWin = null; trayReady = false; } });
   win.webContents.on('did-start-loading', () => { trayReady = false; });
   // links open in the default browser, never inside the app
@@ -183,6 +199,7 @@ function createWindow() {
         return out;
       })()`);
       console.log('SELFTEST', JSON.stringify(result));
+      if (process.env.MADAR_SELFTEST_OUT) fs.writeFileSync(process.env.MADAR_SELFTEST_OUT, JSON.stringify({ ...result, tray: !!tray, platform: process.platform }));
       if (trayWin && process.env.MADAR_SHOT) {
         const sum = await askMain('window.trayApi.summary()');
         console.log('TRAY', JSON.stringify({ title: tray.getTitle(), open: sum.open, tasks: sum.tasks.length }));
@@ -215,11 +232,11 @@ async function askMain(code) {
 }
 async function updateTrayTitle() {
   if (!tray) return;
-  try { const s = await askMain('window.trayApi.summary()'); tray.setTitle(s.open ? ` ${s.open}` : '', { fontType: 'monospacedDigit' }); tray.setToolTip(s.open ? `مدار · باقي ${s.open} من مهام اليوم` : 'مدار'); } catch { /* window not ready */ }
+  try { const s = await askMain('window.trayApi.summary()'); if (IS_MAC) tray.setTitle(s.open ? ` ${s.open}` : '', { fontType: 'monospacedDigit' }); tray.setToolTip(s.open ? `مدار · باقي ${s.open} من مهام اليوم` : 'مدار'); } catch { /* window not ready */ }
 }
 function createTray() {
-  const icon = nativeImage.createFromPath(path.join(__dirname, 'trayTemplate.png'));
-  icon.setTemplateImage(true);
+  const icon = IS_MAC ? nativeImage.createFromPath(path.join(__dirname, 'trayTemplate.png')) : nativeImage.createFromPath(path.join(__dirname, 'icon.png')).resize({ width: 32, height: 32 });
+  if (IS_MAC) icon.setTemplateImage(true);
   tray = new Tray(icon);
   trayWin = new BrowserWindow({
     width: TRAY_W, height: TRAY_H, show: false, frame: false, resizable: false, movable: false, fullscreenable: false,
@@ -228,12 +245,17 @@ function createTray() {
   });
   trayWin.loadFile(path.join(__dirname, '..', 'src', 'tray.html'));
   if (process.env.MADAR_SELFTEST) trayWin.webContents.on('console-message', (_e, level, msg) => { if (level >= 2) console.log('[tray]', msg); });
-  trayWin.on('blur', () => trayWin.hide());
+  // clicking the icon while the window is open blurs it first; remember when, so that click doesn't reopen it
+  let lastHide = 0;
+  trayWin.on('blur', () => { trayWin.hide(); lastHide = Date.now(); });
   const toggle = () => {
     if (trayWin.isVisible()) return trayWin.hide();
+    if (Date.now() - lastHide < 250) return;
     const b = tray.getBounds(), area = screen.getDisplayMatching(b).workArea;
     const x = Math.round(Math.min(area.x + area.width - TRAY_W - 8, Math.max(area.x + 8, b.x + b.width / 2 - TRAY_W / 2)));
-    trayWin.setPosition(x, Math.round(b.y + b.height + 4), false);
+    const below = b.y < area.y + area.height / 2;
+    const y = below ? b.y + b.height + 4 : Math.max(area.y + 8, area.y + area.height - TRAY_H - 8);
+    trayWin.setPosition(x, Math.round(y), false);
     trayWin.show(); trayWin.focus();
     trayWin.webContents.send('tray:refresh');
   };
@@ -280,7 +302,7 @@ app.whenReady().then(() => {
     { role: 'help', submenu: [{ label: 'صفحة المشروع على GitHub', click: () => shell.openExternal('https://github.com/tuwra/madar') }] },
   ]));
   createWindow();
-  if (process.platform === 'darwin') createTray();
+  if (IS_MAC || IS_WIN) createTray();
   app.on('activate', () => showMain());
 });
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('window-all-closed', () => { if (!tray) app.quit(); });

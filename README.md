@@ -2,7 +2,7 @@
 
 # مدار
 
-تطبيق ماك مفتوح المصدر يجمع **المهام، والتقويم، والملاحظات، والدفاتر بخط اليد** في مكان واحد. بسيط، بالعربي، ويشتغل بدون إنترنت، وبدون أي ذكاء اصطناعي.
+تطبيق مفتوح المصدر للماك والويندوز يجمع **المهام، والتقويم، والملاحظات، والدفاتر بخط اليد** في مكان واحد. بسيط، بالعربي، ويشتغل بدون إنترنت، وبدون أي ذكاء اصطناعي.
 
 ## المزايا
 
@@ -51,13 +51,21 @@
 
 ## التثبيت
 
-1. نزّل ملف `.dmg` من صفحة [Releases](https://github.com/tuwra/madar/releases)
+### ماك
+1. نزّل ملف `.dmg` من صفحة [Releases](https://github.com/tuwra/madar/releases): `arm64` لأجهزة Apple Silicon (M1 وأحدث)، و`x64` لأجهزة Intel
 2. افتحه واسحب **Madar** لمجلد التطبيقات
 3. التطبيق مو موقّع من Apple، فأول مرة: كليك يمين على التطبيق ← **فتح** ← **فتح**. أو شغّل هذا في الطرفية:
 
 ```bash
 xattr -cr /Applications/Madar.app
 ```
+
+### ويندوز
+1. نزّل `Madar-Setup-….exe` من صفحة [Releases](https://github.com/tuwra/madar/releases)
+2. شغّله، وبيتثبت لحاله ويطلع له اختصار
+3. الملف مو موقّع، فممكن يطلع تحذير «Windows protected your PC». اضغط **More info** وبعدها **Run anyway**
+
+أيقونة مدار تطلع في شريط القوائم فوق على الماك، وجنب الساعة تحت على ويندوز.
 
 للربط مع قوقل درايف ثبّت [Google Drive for desktop](https://www.google.com/drive/download/)، وبعدها من **الحفظ والمزامنة** داخل التطبيق اختر «احفظ في قوقل درايف».
 
@@ -67,6 +75,7 @@ xattr -cr /Applications/Madar.app
 npm install
 npm start          # يشغّل التطبيق
 npm run dist       # يبني ملف dmg في مجلد dist
+npm run dist:win   # يبني مثبّت ويندوز
 ```
 
 الكود كله JavaScript عادي بدون أدوات بناء: الواجهة في `src/`، وتطبيق Electron في `electron/`. لما ترفع وسم مثل `v1.0.0`، يبني GitHub Actions ملفات dmg لأجهزة Apple Silicon وIntel ويرفقها بالإصدار.
@@ -79,4 +88,4 @@ MIT
 
 ---
 
-**Madar** is an open-source macOS app that combines tasks, a calendar, Notion-style notes and GoodNotes-style handwritten notebooks (with PDF annotation) in one simple Arabic-first app. No AI, works offline, and your data is plain files you can keep in Google Drive. MIT licensed.
+**Madar** is an open-source app for macOS and Windows that combines tasks, a calendar, Notion-style notes and GoodNotes-style handwritten notebooks (with PDF annotation) in one simple Arabic-first app. No AI, works offline, and your data is plain files you can keep in Google Drive. MIT licensed.

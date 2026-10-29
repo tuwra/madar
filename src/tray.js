@@ -4,6 +4,8 @@ const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const call = (name, ...args) => trayBridge.call(name, ...args);
 const pane = $('#pane');
+// Windows has no frosted-glass backdrop behind this window, so it gets a solid one
+if (/Windows/.test(navigator.userAgent)) document.body.classList.add('win');
 const st = { tab: 'today', month: null, day: null, q: '', page: null };
 
 const ICON = {
