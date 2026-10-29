@@ -910,12 +910,12 @@ function renderNotebook(nb) {
     }
     if (e.button > 0) return;
     if (ink.tool === 'hand' || spaceHand) {
-      mode = 'hand'; start = [e.clientX, e.clientY]; col.setPointerCapture(e.pointerId); root.classList.add('grabbing'); e.preventDefault(); return;
+      mode = 'hand'; start = [e.clientX, e.clientY]; try { col.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ } root.classList.add('grabbing'); e.preventDefault(); return;
     }
     const shell = e.target.closest('.pg'); if (!shell) { if (ink.sel) { const v = V.get(ink.sel.pg); ink.sel = null; if (v) renderSel(v); } return; }
     const v = V.get(nb.pages[+shell.dataset.i]); if (!v) return;
     e.preventDefault();
-    col.setPointerCapture(e.pointerId);
+    try { col.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
     act = v;
     const i = indexOf(v.pg);
     if (i !== ui.inkPage) { ui.inkPage = i; floatBar(); bar(); markThumb(); }
@@ -931,7 +931,8 @@ function renderNotebook(nb) {
       cur = { tool: t, style: t === 'hl' ? 'hl' : ink.penStyle, color: curColor(), size: curSize(), pts: [p], o: t === 'hl' ? { ...ink.hlOpts } : { ...ink.penOpts[ink.penStyle] } };
       if (t === 'hl' && ink.hlOpts.straight) { start = p; cur.shape = 'line'; cur.pts = [p, p]; }
       holdAnchor = p; armHold();
-      drawStroke(v.ctx.live, cur, true);
+      clearLive(v); liveFrom = 0; liveRaf = 0;
+      drawLive(v);
     } else if (t === 'eraser') { erasing = { before: snap(v.pg), changed: false }; eraseAt(v, p); }
     else if (t === 'lasso') lasso = [p];
     else if (t === 'shape') { start = p; cur = { tool: 'pen', style: 'ball', color: curColor(), size: curSize(), shape: ink.shape, pts: [p] }; }
@@ -983,7 +984,8 @@ function renderNotebook(nb) {
       if (cur.shape) { if (cur.shape === 'line') { cur.pts[1] = [p[0], p[1], 0.5]; clearLive(v); drawStroke(v.ctx.live, cur, true); } return; }
       for (const ev of evs) cur.pts.push(pt(ev, v));
       if (dist(p, holdAnchor) > 4 / scale) { holdAnchor = p; armHold(); }
-      clearLive(v); drawStroke(v.ctx.live, cur, true);
+      // draw at most once per screen frame; with fast writing many points arrive between frames
+      if (!liveRaf) liveRaf = requestAnimationFrame(() => { liveRaf = 0; if (cur && act === v) drawLive(v); });
     } else if (mode === 'eraser') for (const ev of evs) eraseAt(v, pt(ev, v));
     else if (mode === 'lasso') {
       lasso.push(p);
@@ -1029,6 +1031,27 @@ function renderNotebook(nb) {
       selDrag = null; clearLive(v); drawInk(v); renderItems(v); renderSel(v); save(); bar(); refreshThumb(v.pg);
     }
     if (m !== 'laser') act = null;
+  }
+  let liveFrom = 0, liveRaf = 0;
+  function drawLive(v) {
+    const c = v.ctx.live, P = cur.pts;
+    if (cur.tool !== 'pen' || cur.shape) { clearLive(v); drawStroke(c, cur, true); return; }
+    const o = { ...(PEN_DEFAULTS[cur.style] || PEN_DEFAULTS.fountain), ...(cur.o || {}) }, size = cur.size * 1.15;
+    const real = P.some(q => q[2] !== 0.5);
+    const width = (q, i) => {
+      if (real) return Math.max(size * 0.08, 2 * size * (0.5 - o.thin * (0.5 - q[2])));
+      const d = i ? Math.hypot(q[0] - P[i - 1][0], q[1] - P[i - 1][1]) : 0;
+      return Math.max(size * 0.15, 2 * size * (0.5 - o.thin * (0.5 - Math.max(0, 1 - d / size) * 0.6)));
+    };
+    c.save(); c.strokeStyle = cur.color; c.fillStyle = cur.color; c.lineCap = 'round'; c.lineJoin = 'round';
+    if (P.length === 1) { c.beginPath(); c.arc(P[0][0], P[0][1], width(P[0], 0) / 2, 0, 7); c.fill(); }
+    for (let i = Math.max(1, liveFrom); i < P.length; i++) {
+      const a = P[i - 1], b = P[i], m0 = i > 1 ? [(P[i - 2][0] + a[0]) / 2, (P[i - 2][1] + a[1]) / 2] : a, m1 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      c.lineWidth = width(a, i - 1);
+      c.beginPath(); c.moveTo(m0[0], m0[1]); c.quadraticCurveTo(a[0], a[1], m1[0], m1[1]); c.stroke();
+    }
+    liveFrom = P.length;
+    c.restore();
   }
   function eraserCursor(v, p) {
     const r = ink.eraser === 'part' ? curSize('eraser') : 12, c = v.ctx.live;
@@ -1092,6 +1115,9 @@ function renderNotebook(nb) {
     if (it && !it.text.trim()) { pg.items = pg.items.filter(x => x !== it); repaintPg(pg); save(); }
   });
 
+  const blockTouch = e => { if (e.target.closest('.pg') && !(ink.tool === 'text' && e.target.closest('.ti'))) e.preventDefault(); };
+  col.addEventListener('touchstart', blockTouch, { passive: false });
+  col.addEventListener('touchmove', blockTouch, { passive: false });
   col.addEventListener('pointerdown', down);
   col.addEventListener('pointermove', move);
   col.addEventListener('pointerup', up);

@@ -824,3 +824,5 @@ dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 40px); 
 
 #app.focus { grid-template-columns: 1fr; grid-template-rows: 1fr; }
 #app.focus #nav { display: none; }
+
+.pages-col, .pg, .pg canvas { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
