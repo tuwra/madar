@@ -699,3 +699,7 @@ dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 40px); 
 .recent-card { grid-column: 1 / -1; }
 .recent-card .recent { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 @media (max-width: 1000px) { .recent-card .recent { grid-template-columns: 1fr 1fr; } }
+
+.credit { display: block; text-align: center; font-size: 11px; color: var(--muted); text-decoration: none; padding: 8px 0 0; opacity: .75; }
+.credit:hover { opacity: 1; color: var(--accent); }
+@media (max-width: 760px) { .credit { display: none; } }

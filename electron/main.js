@@ -293,6 +293,10 @@ ipcMain.handle('tray:hide', () => trayWin?.hide());
 ipcMain.on('state:changed', () => { updateTrayTitle(); if (trayWin?.isVisible()) trayWin.webContents.send('tray:refresh'); });
 
 app.on('before-quit', () => { quitting = true; });
+app.setAboutPanelOptions({
+  applicationName: 'مدار', applicationVersion: app.getVersion(),
+  copyright: '© 2026 رائد العتيبي (Raeed Alotaibi)', credits: 'صمّمه وطوّره رائد العتيبي', website: 'https://github.com/tuwra/madar',
+});
 app.whenReady().then(() => {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { role: 'appMenu' },

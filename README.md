@@ -80,12 +80,14 @@ npm run dist:win   # يبني مثبّت ويندوز
 
 الكود كله JavaScript عادي بدون أدوات بناء: الواجهة في `src/`، وتطبيق Electron في `electron/`. لما تنشر إصدار جديد، يبني GitHub Actions ملف dmg لأجهزة Apple Silicon ومثبّت ويندوز، ويرفقهم بالإصدار.
 
-## الرخصة
+## الحقوق
 
-MIT
+صمّمه وطوّره **رائد العتيبي** ([@tuwra](https://github.com/tuwra)).
+
+© 2026 رائد العتيبي. مفتوح المصدر برخصة MIT.
 
 </div>
 
 ---
 
-**Madar** is an open-source app for macOS and Windows that combines tasks, a calendar, Notion-style notes and GoodNotes-style handwritten notebooks (with PDF annotation) in one simple Arabic-first app. No AI, works offline, and your data is plain files you can keep in Google Drive. MIT licensed.
+**Madar** is an open-source app for macOS and Windows that combines tasks, a calendar, Notion-style notes and GoodNotes-style handwritten notebooks (with PDF annotation) in one simple Arabic-first app. No AI, works offline, and your data is plain files you can keep in Google Drive. Made by Raeed Alotaibi (رائد العتيبي). MIT licensed.

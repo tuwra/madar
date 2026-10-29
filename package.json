@@ -1,11 +1,14 @@
 {
   "name": "madar",
   "productName": "Madar",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "مدار: مهام وتقويم وملاحظات ودفاتر بخط اليد في تطبيق واحد للماك",
   "main": "electron/main.js",
   "license": "MIT",
-  "author": "Raeed Alotaibi",
+  "author": {
+    "name": "رائد العتيبي (Raeed Alotaibi)",
+    "url": "https://github.com/tuwra"
+  },
   "scripts": {
     "postinstall": "node scripts/vendor.js",
     "start": "electron .",
@@ -25,7 +28,7 @@
   "build": {
     "appId": "app.madar.desktop",
     "productName": "Madar",
-    "copyright": "MIT License",
+    "copyright": "© 2026 رائد العتيبي (Raeed Alotaibi)",
     "directories": {
       "output": "dist",
       "buildResources": "build"

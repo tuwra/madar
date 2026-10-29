@@ -20,6 +20,7 @@ async function storageDialog() {
     <div class="row wrap"><button class="btn" value="choose">اختيار مجلد آخر…</button><button class="btn" value="reveal">فتح المجلد في Finder</button></div>
     <span class="note">نسخة احتياطية</span>
     <div class="row wrap"><button class="btn" value="export">تصدير نسخة (JSON)</button><button class="btn" value="import">استرجاع من نسخة</button></div>
+    <p class="note" style="text-align:center">مدار · صمّمه وطوّره رائد العتيبي · مفتوح المصدر</p>
     <div class="dlg-actions"><span class="grow"></span><button class="btn" value="cancel">إغلاق</button></div>`, async (fd, v) => {
     if (v.startsWith('cloud:') || v === 'choose') {
       flush();
