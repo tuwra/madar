@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const IS_MAC = process.platform === 'darwin', IS_WIN = process.platform === 'win32';
+const updater = require('./updater');
 
 app.setName('Madar');
 
@@ -262,6 +263,7 @@ function createTray() {
   tray.on('click', toggle);
   tray.on('right-click', () => tray.popUpContextMenu(Menu.buildFromTemplate([
     { label: 'فتح مدار', click: () => showMain() },
+    { label: 'التحقق من التحديثات…', click: () => { showMain(); updater.check(true); } },
     { type: 'separator' },
     { label: 'إنهاء مدار', click: () => { quitting = true; app.quit(); } },
   ])));
@@ -278,7 +280,7 @@ ipcMain.handle('tray:summary', () => askMain('window.trayApi.summary()'));
 ipcMain.handle('tray:toggle', (_e, id) => askMain(`window.trayApi.toggle(${JSON.stringify(String(id))})`));
 ipcMain.handle('tray:add', (_e, text) => askMain(`window.trayApi.add(${JSON.stringify(String(text))})`));
 ipcMain.handle('tray:open', (_e, view) => { trayWin?.hide(); showMain(String(view)); });
-const TRAY_CALLS = ['summary', 'toggle', 'add', 'month', 'day', 'addOn', 'toggleOn', 'pages', 'page', 'toggleBlock', 'appendToPage', 'newNote'];
+const TRAY_CALLS = ['summary', 'toggle', 'add', 'habitTap', 'month', 'day', 'addOn', 'toggleOn', 'pages', 'page', 'toggleBlock', 'appendToPage', 'newNote'];
 const TRAY_OPENS = ['openPage', 'openNotebook'];
 ipcMain.handle('tray:call', (_e, name, args = []) => {
   if (!TRAY_CALLS.includes(name) && name !== 'notebooks') throw new Error('not allowed');
@@ -293,13 +295,22 @@ ipcMain.handle('tray:hide', () => trayWin?.hide());
 ipcMain.on('state:changed', () => { updateTrayTitle(); if (trayWin?.isVisible()) trayWin.webContents.send('tray:refresh'); });
 
 app.on('before-quit', () => { quitting = true; });
+app.on('madar-quit-for-update', () => { quitting = true; });
+ipcMain.handle('update:get', () => updater.getState());
+ipcMain.handle('update:check', () => updater.check(true));
+ipcMain.handle('update:install', () => updater.install());
 app.setAboutPanelOptions({
   applicationName: 'مدار', applicationVersion: app.getVersion(),
   copyright: '© 2026 رائد العتيبي (Raeed Alotaibi)', credits: 'صمّمه وطوّره رائد العتيبي', website: 'https://github.com/tuwra/madar',
 });
 app.whenReady().then(() => {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { role: 'appMenu' },
+    IS_MAC ? { label: app.name, submenu: [
+      { role: 'about', label: 'عن مدار' },
+      { label: 'التحقق من التحديثات…', click: () => { showMain(); updater.check(true); } },
+      { type: 'separator' }, { role: 'hide', label: 'إخفاء مدار' }, { role: 'hideOthers' }, { role: 'unhide' },
+      { type: 'separator' }, { role: 'quit', label: 'إنهاء مدار' },
+    ] } : { label: 'مدار', submenu: [{ label: 'التحقق من التحديثات…', click: () => updater.check(true) }, { role: 'quit', label: 'إنهاء' }] },
     { role: 'editMenu' },
     { label: 'عرض', submenu: [{ role: 'reload' }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' }] },
     { role: 'windowMenu' },
@@ -307,6 +318,8 @@ app.whenReady().then(() => {
   ]));
   createWindow();
   if (IS_MAC || IS_WIN) createTray();
+  // MADAR_UPDATE_TEST installs the first update it finds, to test the whole update path
+  updater.start(st => { if (process.env.MADAR_UPDATE_TEST && st.status === 'available') updater.install(); mainWin?.webContents.send('update:state', st); if (st.status === 'ready' || st.status === 'available') tray?.setToolTip(`مدار · تحديث جديد ${st.version}`); });
   app.on('activate', () => showMain());
 });
 app.on('window-all-closed', () => { if (!tray) app.quit(); });

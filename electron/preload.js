@@ -21,4 +21,5 @@ contextBridge.exposeInMainWorld('madar', {
   fileExists: p => call('file:exists', p),
   ask: opts => call('ask', opts),
   changed: () => ipcRenderer.send('state:changed'),
+  update: { get: () => call('update:get'), check: () => call('update:check'), install: () => call('update:install'), on: cb => ipcRenderer.on('update:state', (_e, st) => cb(st)) },
 });

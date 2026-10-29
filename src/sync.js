@@ -20,6 +20,7 @@ async function storageDialog() {
     <div class="row wrap"><button class="btn" value="choose">اختيار مجلد آخر…</button><button class="btn" value="reveal">فتح المجلد في Finder</button></div>
     <span class="note">نسخة احتياطية</span>
     <div class="row wrap"><button class="btn" value="export">تصدير نسخة (JSON)</button><button class="btn" value="import">استرجاع من نسخة</button></div>
+    <div class="row wrap" style="justify-content:center"><button class="btn small" data-act="update-check" type="button">التحقق من التحديثات</button></div>
     <p class="note" style="text-align:center">مدار · صمّمه وطوّره رائد العتيبي · مفتوح المصدر</p>
     <div class="dlg-actions"><span class="grow"></span><button class="btn" value="cancel">إغلاق</button></div>`, async (fd, v) => {
     if (v.startsWith('cloud:') || v === 'choose') {
@@ -75,3 +76,38 @@ window.addEventListener('focus', async () => {
   if (!(ui.view === 'notes' && document.activeElement?.isContentEditable)) render();
   toast('تحدّثت البيانات من جهازك الثاني');
 });
+
+/* ---------- app updates ---------- */
+const upd = { st: null, dismissed: null };
+function updateBar() {
+  const st = upd.st;
+  let bar = $('#update-bar');
+  const show = st && ['available', 'downloading', 'installing', 'ready'].includes(st.status) && upd.dismissed !== st.version;
+  if (!show) { bar?.remove(); return; }
+  if (!bar) { bar = document.createElement('div'); bar.id = 'update-bar'; document.body.appendChild(bar); requestAnimationFrame(() => bar.classList.add('on')); }
+  const busy = st.status === 'downloading' || st.status === 'installing';
+  bar.innerHTML = `
+    <div class="ub-icon">${busy ? '<span class="spin"></span>' : '✨'}</div>
+    <div class="ub-text">
+      <b>${st.status === 'installing' ? 'جاري التثبيت… مدار بيقفل ويرجع لحاله' : st.status === 'downloading' ? `جاري تنزيل التحديث ${esc(st.version || '')}…` : `تحديث جديد: مدار ${esc(st.version)}`}</b>
+      ${busy ? `<div class="ub-prog"><i style="width:${st.progress || 0}%"></i></div>` : `<small>${esc((st.notes || [])[0] || 'فيه تحسينات وإصلاحات جديدة')}${st.error ? ` · ما زبط: ${esc(st.error)}` : ''}</small>`}
+    </div>
+    ${busy ? '' : `<button class="btn primary small" data-act="update-now">حدّث الحين</button><button class="btn ghost small" data-act="update-later">لاحقًا</button>`}`;
+}
+if (desktop?.update) {
+  desktop.update.on(st => {
+    const before = upd.st?.status;
+    upd.st = st; updateBar();
+    if (st.manual && st.status === 'latest' && before === 'checking') toast(`عندك آخر إصدار (${st.version}) ✓`);
+    if (st.manual && st.status === 'error' && before === 'checking') toast('ما قدرت أتأكد من التحديثات. تأكد من الإنترنت وجرّب مرة ثانية.', 4000);
+    if (st.manual && st.status === 'checking') toast('أتأكد من التحديثات…', 1500);
+  });
+  desktop.update.get().then(st => { upd.st = st; updateBar(); });
+}
+A['update-now'] = () => {
+  flush(); // write everything to disk before the app closes
+  if (upd.st?.status === 'ready' || upd.st?.status === 'available') { upd.st = { ...upd.st, status: upd.st.status === 'ready' ? 'installing' : 'downloading', progress: 0 }; updateBar(); }
+  setTimeout(() => desktop.update.install(), 150);
+};
+A['update-later'] = () => { upd.dismissed = upd.st?.version; updateBar(); };
+A['update-check'] = () => desktop?.update?.check();

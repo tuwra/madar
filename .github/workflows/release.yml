@@ -60,5 +60,6 @@ jobs:
           $r = Get-Content $env:MADAR_SELFTEST_OUT -Raw; Write-Output $r
           $j = $r | ConvertFrom-Json
           if (-not ($j.desktop -and $j.saved -and $j.blob -and $j.notes -and $j.ink -and $j.libs.pdf)) { throw 'smoke test failed' }
-      - run: gh release upload "$env:TAG" (Get-ChildItem dist\*.exe).FullName --clobber
+      # latest.yml and the blockmap are what installed copies read to find and download updates
+      - run: gh release upload "$env:TAG" (Get-ChildItem dist\*.exe, dist\latest.yml, dist\*.exe.blockmap).FullName --clobber
         shell: pwsh

@@ -1,7 +1,7 @@
 {
   "name": "madar",
   "productName": "Madar",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "description": "مدار: مهام وتقويم وملاحظات ودفاتر بخط اليد في تطبيق واحد للماك",
   "main": "electron/main.js",
   "license": "MIT",
@@ -19,11 +19,11 @@
   "devDependencies": {
     "@fontsource/ibm-plex-sans-arabic": "5.3.0",
     "@highlightjs/cdn-assets": "11.11.1",
+    "electron": "38.4.0",
+    "electron-builder": "26.0.12",
     "jspdf": "3.0.3",
     "katex": "0.16.22",
-    "pdfjs-dist": "3.11.174",
-    "electron": "38.4.0",
-    "electron-builder": "26.0.12"
+    "pdfjs-dist": "3.11.174"
   },
   "build": {
     "appId": "app.madar.desktop",
@@ -67,11 +67,22 @@
       "artifactName": "Madar-Setup-${version}.${ext}",
       "shortcutName": "Madar",
       "uninstallDisplayName": "Madar"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "tuwra",
+        "repo": "madar",
+        "releaseType": "release"
+      }
+    ]
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/tuwra/madar.git"
   },
-  "homepage": "https://github.com/tuwra/madar"
+  "homepage": "https://github.com/tuwra/madar",
+  "dependencies": {
+    "electron-updater": "6.6.2"
+  }
 }

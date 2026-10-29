@@ -49,6 +49,7 @@ async function viewToday() {
     <form data-form="task"><input data-focus name="q" placeholder="أضف مهمة… (بكرة 5:30 !!)" autocomplete="off"></form>
     <div class="list">
       ${total ? open.map(row).join('') + done.map(row).join('') : '<div class="empty"><b>☀︎</b>ما عندك مهام اليوم</div>'}
+      ${s.habits?.length ? `<div class="sec">العادات</div><div class="habits">${s.habits.map(h => `<button class="hb ${h.done ? 'done' : ''}" data-habit="${h.id}" style="--c:${h.color}"><span class="hb-ic">${h.done ? '✓' : h.icon}</span><span>${esc(h.name)}${h.goal > 1 ? ` · ${h.cnt}/${h.goal}` : ''}</span></button>`).join('')}</div>` : ''}
       ${s.events.length ? `<div class="sec">المواعيد</div>${s.events.map(evRow).join('')}` : ''}
     </div>
     <footer><span></span><button data-app="tasks">كل المهام ${ICON.open}</button></footer>`;
@@ -120,6 +121,7 @@ document.addEventListener('click', async e => {
     if (st.tab === 'cal') await call('toggleOn', st.day, t.dataset.toggle); else await trayBridge.toggle(t.dataset.toggle);
     setTimeout(() => show(false), 260); return;
   }
+  if (t.dataset.habit) { t.classList.add('pop'); await call('habitTap', t.dataset.habit); return show(false); }
   if (t.dataset.app) return trayBridge.open(t.dataset.app);
   if (t.dataset.month) { st.month = t.dataset.month; st.day = null; return show(false); }
   if ('today' in t.dataset) { st.month = null; st.day = null; return show(false); }

@@ -83,6 +83,7 @@ function renderToday() {
         <div class="card-head"><h3>ملاحظة سريعة</h3></div>
         <form data-qn><textarea id="qn" rows="3" placeholder="اكتب فكرة… أول سطر يصير العنوان. ⌘↩ للحفظ"></textarea><div class="row"><span class="grow"></span><button class="btn primary small">حفظ في الملاحظات</button></div></form>
       </section>
+      ${todayHabits()}
       <section class="card recent-card">
         <div class="card-head"><h3>كمّل من وين وقفت</h3></div>
         <div class="recent">

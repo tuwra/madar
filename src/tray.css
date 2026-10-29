@@ -132,3 +132,10 @@ footer button svg { width: 14px; height: 14px; }
 
 .win .tray { background: #f6f6f8; border: 1px solid rgba(0,0,0,.12); }
 @media (prefers-color-scheme: dark) { .win .tray { background: #202022; border-color: rgba(255,255,255,.12); } }
+.habits { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 4px 6px; }
+.hb { display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 99px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); font-size: 12.5px; transition: background .2s, transform .15s; }
+.hb:hover { background: var(--hover); }
+.hb-ic { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--c) 22%, transparent); font-size: 13px; }
+.hb.done .hb-ic { background: var(--c); color: #fff; font-weight: 700; }
+.hb.done { color: var(--muted); }
+.hb.pop { animation: pop .3s ease-out; }

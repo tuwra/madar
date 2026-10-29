@@ -3,6 +3,7 @@
 
 // bring data saved by older versions up to the current shape
 function migrate(st) {
+  st.habits ||= [];
   for (const p of st.pages || []) {
     p.parentId ??= null; p.cover ??= null;
     for (const b of p.blocks) {

@@ -128,7 +128,7 @@ function render() {
   cleanup?.(); cleanup = null;
   view.classList.remove('full');
   $$('#nav [data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === ui.view));
-  ({ today: renderToday, tasks: renderTasks, calendar: renderCalendar, notes: renderNotes, ink: renderInk })[ui.view]();
+  ({ today: renderToday, tasks: renderTasks, habits: renderHabits, calendar: renderCalendar, notes: renderNotes, ink: renderInk })[ui.view]();
   try { localStorage.setItem('madar-ui', JSON.stringify({ view: ui.view, taskFilter: ui.taskFilter, pageId: ui.pageId, notebookId: ui.notebookId, inkPage: ui.inkPage })); } catch { /* ignore */ }
 }
 function go(v, extra = {}) { Object.assign(ui, { view: v }, extra); view.scrollTop = 0; render(); }
@@ -289,7 +289,8 @@ window.trayApi = {
       });
     const events = state.events.filter(e => e.date === td).sort((a, b) => (a.start || '').localeCompare(b.start || ''))
       .map(e => ({ title: e.title, color: e.color, time: e.start ? `${e.start}${e.end ? ' – ' + e.end : ''}` : 'طوال اليوم' }));
-    return { dateLabel: fmt(td, { weekday: 'long', day: 'numeric', month: 'long' }), hijri: hijri(td), tasks, events, open: tasks.filter(t => !t.done).length };
+    const hab = (state.habits || []).filter(h => !h.archived && isDue(h, td)).map(h => ({ id: h.id, icon: h.icon, name: h.name, color: h.color, done: doneOn(h, td), cnt: countOn(h, td), goal: h.goal || 1 }));
+    return { dateLabel: fmt(td, { weekday: 'long', day: 'numeric', month: 'long' }), hijri: hijri(td), tasks, events, habits: hab, open: tasks.filter(t => !t.done).length };
   },
   refreshView() { if (['today', 'tasks', 'calendar'].includes(ui.view) && !$('#dlg').open && !document.activeElement?.closest?.('form[data-quick]')) render(); },
   toggle(id) {
@@ -338,6 +339,7 @@ window.trayApi = {
     return this.day(ds);
   },
   toggleOn(ds, id) { this.toggle(id); return this.day(ds); },
+  habitTap(id) { const h = (state.habits || []).find(x => x.id === id); if (h) { logHabit(h, todayStr(), +1); flush(); this.refreshView(); if (ui.view === 'habits') render(); } return this.summary(); },
 
   /* notes tab */
   pages(q = '') {
