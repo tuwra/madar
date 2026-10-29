@@ -12,7 +12,7 @@ const pageH = pg => pg.h || 1414;
 
 const PAPERS = {
   blank: ['سادة', 'basic'], lined: ['مسطّر', 'basic'], narrow: ['مسطّر ضيق', 'basic'], grid: ['مربعات', 'basic'], dots: ['نقاط', 'basic'],
-  cornell: ['كورنيل', 'basic'], music: ['نوتة موسيقية', 'basic'],
+  cornell: ['كورنيل', 'basic'], study: ['ملخص دراسي', 'basic'], music: ['نوتة موسيقية', 'basic'],
   daily: ['يومي', 'planner'], weekly: ['أسبوعي', 'planner'], monthly: ['شهري', 'planner'], habits: ['متتبع العادات', 'planner'],
   todo: ['قائمة مهام', 'planner'], goals: ['أهداف', 'planner'], meeting: ['اجتماع', 'planner'], reading: ['سجل قراءة', 'planner'],
 };
@@ -49,7 +49,7 @@ function drawPaper(c, nb, pg) {
     ac: nb.color || '#4f46e5',
     text: isDark(colorKey) ? '#e5e7eb' : '#334155',
     muted: isDark(colorKey) ? '#8b95a1' : '#94a3b8',
-    tpl: pg.tpl || tplInit(paper),
+    tpl: pg.tpl || tplInit(paper), colorKey,
   };
   c.save();
   c.fillStyle = bg; c.fillRect(0, 0, W, H);
@@ -91,6 +91,17 @@ const TEMPLATES = {
     ruled(P, 50, cue - 10, 196, sum - 20, 44);
     hl(P, 150, 30, P.W - 30, 2); hl(P, sum, 30, P.W - 30, 2); vl(P, cue, 150, sum, 2);
     txt(P, 'الأسئلة', P.W - 50, 190, { size: 18, color: P.muted }); txt(P, 'الملخص', P.W - 50, sum + 34, { size: 18, color: P.muted });
+  },
+  // a framed study page: header band, a side column for key words, ruled notes, and a summary strip
+  study(P) {
+    const c = P.c, m = 22, frame = P.ac, side = P.W - Math.min(250, P.W * 0.25), sum = P.H - Math.min(300, P.H * 0.22);
+    c.save(); c.fillStyle = frame; c.fillRect(0, 0, P.W, P.H); c.restore();
+    c.save(); c.fillStyle = P.dark ? '#1f2328' : (PAPER_COLORS[P.colorKey]?.[0] || '#fff'); c.beginPath(); c.roundRect(m, m, P.W - 2 * m, P.H - 2 * m, 14); c.fill(); c.restore();
+    ruled(P, m + 10, P.W - m - 10, 150, sum - 10, 36);
+    hl(P, 112, m, P.W - m, 2.2, frame);
+    vl(P, side, 112, sum, 1.6, P.line);
+    hl(P, sum, m, P.W - m, 2.2, frame);
+    txt(P, 'الملخص', P.W - 50, sum + 40, { size: 20, weight: 700, color: frame });
   },
   music(P) { for (let y = 150; y < P.H - 120; y += 120) for (let k = 0; k < 5; k++) hl(P, y + k * 14, 50, P.W - 50, 1.2); },
 

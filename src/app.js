@@ -99,7 +99,6 @@ function newTask(title, listId = 'inbox', due = null, priority = 0) {
 }
 function seed() {
   const t = todayStr();
-  const b = (type, text, checked = false) => ({ id: uid(), type, text, checked });
   return {
     v: 1,
     lists: [
@@ -113,20 +112,9 @@ function seed() {
       newTask('اكتب أول ملاحظة لك', 'inbox', addDays(t, 1), 1),
     ],
     events: [{ id: uid(), title: 'مثال: اجتماع الفريق', date: t, start: '10:00', end: '11:00', color: '#0ea5e9' }],
-    pages: [{
-      id: uid(), title: 'أهلاً في مدار', icon: '👋', updated: Date.now(),
-      blocks: [
-        b('p', 'هذي صفحة ملاحظات. اكتب أي شي، وكل سطر تقدر تحوّله لعنوان أو قائمة أو مهمة. حدد أي نص عشان تخليه عريض أو مظلل أو رابط.'),
-        b('h2', 'اختصارات الكتابة'),
-        b('bullet', 'اكتب # ثم مسافة لعنوان كبير، و ## لعنوان أصغر'),
-        b('bullet', 'اكتب - ثم مسافة لقائمة نقطية'),
-        b('bullet', 'اكتب [] ثم مسافة لمربع مهمة'),
-        b('bullet', 'اكتب > ثم مسافة لقائمة منسدلة، و --- لخط فاصل'),
-        b('callout', 'اكتب / في أي مكان وتطلع لك كل الأوامر: كود، جدول، صورة، ملف، PDF، معادلة، صفحة فرعية، وملف من قوقل درايف'),
-        b('todo', 'جرّب تشيّك هذا المربع'),
-      ],
-    }],
-    notebooks: [{ id: uid(), name: 'دفتري الأول', color: '#f59e0b', paper: 'lined', pages: [{ id: uid(), strokes: [] }] }],
+    pages: guidePages(),
+    notebooks: [sampleNotebook(), { id: uid(), name: 'دفتري الأول', color: '#f59e0b', paper: 'lined', pages: [{ id: uid(), strokes: [] }] }],
+    onboarding: 2,
   };
 }
 
