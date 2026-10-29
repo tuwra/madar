@@ -58,6 +58,8 @@ const ICON = {
   mark: '<path d="M7 4.5h10v15l-5-3.6-5 3.6z"/>',
   markOn: '<path d="M7 4.5h10v15l-5-3.6-5 3.6z" fill="currentColor"/>',
   addPage: '<path d="M13.5 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9z"/><path d="M13.5 3.5V9H19"/><path d="M12 12v5M9.5 14.5h5"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/><circle cx="12" cy="12" r="6.3"/>',
+  tune: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   more: '<circle cx="6" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="18" cy="12" r="1.3" fill="currentColor"/>',
   hand: '<path d="M8 13V6.5a1.5 1.5 0 0 1 3 0V12"/><path d="M11 11V5a1.5 1.5 0 0 1 3 0v6"/><path d="M14 11V6.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-.5a6 6 0 0 1-4.9-2.5L3.8 14a1.5 1.5 0 0 1 2.4-1.8L8 14.5"/>',
   zoomIn: '<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5M8 10.5h5M10.5 8v5"/>',
@@ -143,14 +145,14 @@ function outlinePath(P, radii) {
     let q = [[a[0] + nx * ra, a[1] + ny * ra], [b[0] + nx * rb, b[1] + ny * rb], [b[0] - nx * rb, b[1] - ny * rb], [a[0] - nx * ra, a[1] - ny * ra]];
     let area = 0; for (let k = 0; k < 4; k++) { const [x1, y1] = q[k], [x2, y2] = q[(k + 1) % 4]; area += x1 * y2 - x2 * y1; }
     if (area < 0) q = q.reverse(); // same direction as the dabs
-    path.moveTo(q[0][0], q[0][1]); path.lineTo(q[1][0], q[1][1]); path.lineTo(q[2][0], q[2][1]); path.lineTo(q[3][0], q[3][1]); path.closePath();
+    path.moveTo(q[0][0], q[0][1]); path.lineTo(q[1][0], q[1][1]); path.lineTo(q[2][0], q[2][1]); path.lineTo(q[3][0], q[3][1]); // fill closes it (closePath gets slow on long strokes)
   }
   return path;
 }
 function penPath(s) {
   const o = { ...(PEN_DEFAULTS[s.style] || PEN_DEFAULTS.fountain), ...(s.o || {}) };
   const size = s.size * 1.15; // nib diameter
-  const P = streamline(s.pts, 0.12 + o.stab * 0.72, Math.max(0.25, size * 0.06));
+  const P = streamline(s.pts, 0.12 + o.stab * 0.72, Math.max(0.3, size * 0.15));
   const real = s.pts.some(p => p[2] !== 0.5);
   const len = [0]; for (let i = 1; i < P.length; i++) len.push(len[i - 1] + dist(P[i], P[i - 1]));
   const total = len[len.length - 1], tl = o.sharp * size * 7;
@@ -163,7 +165,24 @@ function penPath(s) {
     if (tl > 0) { r *= ease(Math.min(1, 0.15 + len[i] / tl)); r *= ease(Math.min(1, 0.15 + (total - len[i]) / tl)); }
     return Math.max(size * 0.04, r);
   });
-  return outlinePath(P, radii);
+  const C = curve(P.map((p, i) => [p[0], p[1], radii[i]]), Math.max(0.3, size * 0.3));
+  return outlinePath(C, C.map(q => q[2]));
+}
+// a Catmull-Rom curve through the points, so fast writing comes out round instead of in
+// straight pieces; the third value (the width) is blended along with it
+function curve(P, step) {
+  if (P.length < 3) return P;
+  const out = [P[0]];
+  const f = (a, b, c, d, t) => 0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (3 * b - a - 3 * c + d) * t * t * t);
+  for (let i = 0; i < P.length - 1; i++) {
+    const p0 = P[i - 1] || P[i], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2] || p2;
+    const n = Math.min(16, Math.ceil(dist(p1, p2) / step));
+    for (let j = 1; j <= n; j++) {
+      const t = j / n;
+      out.push([f(p0[0], p1[0], p2[0], p3[0], t), f(p0[1], p1[1], p2[1], p3[1], t), p1[2] + (p2[2] - p1[2]) * t]);
+    }
+  }
+  return out;
 }
 function hull(pts) {
   const p = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
@@ -183,7 +202,7 @@ function hlPath(s) {
   const P = s.shape ? s.pts : streamline(s.pts, 0.5, 0.6);
   const path = new Path2D();
   const rect = p => [[p[0] - hw, p[1] - hh], [p[0] + hw, p[1] - hh], [p[0] + hw, p[1] + hh], [p[0] - hw, p[1] + hh]];
-  const add = poly => { path.moveTo(poly[0][0], poly[0][1]); for (let i = 1; i < poly.length; i++) path.lineTo(poly[i][0], poly[i][1]); path.closePath(); };
+  const add = poly => { path.moveTo(poly[0][0], poly[0][1]); for (let i = 1; i < poly.length; i++) path.lineTo(poly[i][0], poly[i][1]); };
   if (P.length === 1) add(rect(P[0]));
   for (let i = 1; i < P.length; i++) add(hull([...rect(P[i - 1]), ...rect(P[i])]));
   return path;
@@ -784,27 +803,61 @@ function renderNotebook(nb) {
     for (const v of V.values()) $$('.ti', v.items).forEach(el => { el.contentEditable = t === 'text'; });
   }
   const slider = (key, label, val, min, max, step, shown) => `<label class="pp-row"><span>${label}</span><input type="range" data-pp="${key}" min="${min}" max="${max}" step="${step}" value="${val}"><output>${shown}</output></label>`;
-  function penPanel() {
-    const st = ink.penStyle, o = ink.penOpts[st], size = curSize('pen');
-    return `<div class="pp">
-      <div class="pp-types">${Object.entries(PEN_STYLES).map(([k, n]) => `<button class="pp-type ${st === k ? 'on' : ''}" data-act="pen-style" data-s="${k}">${ic(k === 'fountain' ? 'fountain' : k)}<span>${n}</span></button>`).join('')}</div>
-      <canvas class="pp-prev" width="560" height="140"></canvas>
-      ${slider('size', 'السماكة', size, 0.4, 14, 0.1, size.toFixed(1))}
-      ${slider('sharp', 'حدّة الرأس', Math.round(o.sharp * 100), 0, 100, 1, Math.round(o.sharp * 100) + '%')}
-      ${slider('thin', 'حساسية الضغط', Math.round(o.thin * 100), 0, 100, 1, Math.round(o.thin * 100) + '%')}
-      ${slider('stab', 'ثبات الخط', Math.round(o.stab * 100), 0, 100, 1, Math.round(o.stab * 100) + '%')}
-      <button class="btn small ghost" data-act="pen-reset">رجوع للإعدادات الأصلية</button>
+  // sizes are shown in millimetres of the page, like GoodNotes (a page is 1000 units = 210 mm wide)
+  const MM = { pen: 0.21 * 1.15, hl: 0.21 * 5.2 };
+  const SIZE_PRESETS = { pen: [0.18, 0.35, 0.5, 1, 2], hl: [2, 3.5, 5, 7, 10] };
+  const MM_RANGE = { pen: [0.1, 5], hl: [1, 12] };
+  const fmtMm = mm => (mm < 1 ? mm.toFixed(2) : mm.toFixed(1)) + 'mm';
+  // the slider moves on a log scale, so the thin sizes get as much room as the thick ones
+  const mmToT = (k, mm) => { const [lo, hi] = MM_RANGE[k]; return Math.round(Math.log(Math.min(hi, Math.max(lo, mm)) / lo) / Math.log(hi / lo) * 1000); };
+  const tToMm = (k, t) => { const [lo, hi] = MM_RANGE[k]; return lo * Math.pow(hi / lo, t / 1000); };
+  const PEN_ART = {
+    ball: '<svg viewBox="0 0 48 48"><path d="M19 4h10v22l-5 16-5-16z" fill="#2b2b2e"/><path d="M19 26h10l-5 16z" fill="#c9ccd1"/><circle cx="24" cy="40.5" r="1.6" fill="#2b2b2e"/><rect x="19" y="4" width="10" height="7" fill="#4b4b50"/></svg>',
+    fountain: '<svg viewBox="0 0 48 48"><path d="M18 3h12v17H18z" fill="#2b2b2e"/><path d="M17 20h14l-7 25z" fill="#d7dade"/><path d="M24 25v13" stroke="#2b2b2e" stroke-width="1.2"/><circle cx="24" cy="25" r="1.6" fill="#2b2b2e"/></svg>',
+    brush: '<svg viewBox="0 0 48 48"><path d="M18 3h12v19H18z" fill="#2b2b2e"/><path d="M18 22h12c0 9-3 17-6 23-3-6-6-14-6-23z" fill="#1c1c1e"/><path d="M18 22h12v3H18z" fill="#6b6b70"/></svg>',
+    chisel: '<svg viewBox="0 0 48 48"><path d="M17 3h14v22H17z" fill="#f2c200"/><path d="M17 25h14l-2 9H19z" fill="#d9dce0"/><path d="M19 34h10l-1 8h-8z" fill="#f2c200"/></svg>',
+    round: '<svg viewBox="0 0 48 48"><path d="M17 3h14v22H17z" fill="#f2c200"/><path d="M17 25h14l-2 9H19z" fill="#d9dce0"/><path d="M19 34h10v4a5 5 0 0 1-10 0z" fill="#f2c200"/></svg>',
+  };
+  const ttab = () => pop.dataset.tab === 'opts' ? 'opts' : 'main';
+  function sizeRow(k) {
+    const cur = curSize(k) * MM[k];
+    return `<div class="pt-label">الحجم</div>
+      <div class="pt-sizes">${SIZE_PRESETS[k].map(mm => { const d = dotPx(k, mm / MM[k]); return `<button class="pt-size ${Math.abs(mm - cur) < 0.005 ? 'on' : ''}" data-act="pt-preset" data-mm="${mm}"><i><span style="width:${d}px;height:${d}px"></span></i><b>${fmtMm(mm)}</b></button>`; }).join('')}</div>
+      <div class="pt-slider"><input type="range" data-pp="mm" min="0" max="1000" step="1" value="${mmToT(k, cur)}"><output>${fmtMm(cur)}</output></div>`;
+  }
+  function toolPanel(title, body) {
+    const t = ttab();
+    return `<div class="pt" data-tab="${t}">
+      <div class="pt-head">${title}</div>
+      <div class="pt-body"><canvas class="pp-prev" width="600" height="150"></canvas>${body}</div>
+      <div class="pt-tabs"><button class="${t === 'main' ? 'on' : ''}" data-act="pt-tab" data-t="main" title="الأداة">${ic('pen')}</button><button class="${t === 'opts' ? 'on' : ''}" data-act="pt-tab" data-t="opts" title="الإعدادات">${ic('tune')}</button></div>
     </div>`;
   }
+  function penPanel() {
+    const st = ink.penStyle, o = ink.penOpts[st];
+    const body = ttab() === 'main'
+      ? `<div class="pt-label">القلم</div>
+        <div class="pt-pens">${['ball', 'fountain', 'brush'].map(k => `<button class="pt-pen ${st === k ? 'on' : ''}" data-act="pen-style" data-s="${k}" title="${PEN_STYLES[k]}">${PEN_ART[k]}</button>`).join('')}
+          <button class="pt-gear" data-act="pt-tab" data-t="opts" title="إعدادات ${PEN_STYLES[st]}">${ic('gear')}</button></div>
+        <div class="pt-sep"></div>${sizeRow('pen')}`
+      : `<div class="pt-label">إعدادات ${PEN_STYLES[st]}</div>
+        ${slider('sharp', 'حدّة الرأس', Math.round(o.sharp * 100), 0, 100, 1, Math.round(o.sharp * 100) + '%')}
+        ${slider('thin', 'حساسية الضغط', Math.round(o.thin * 100), 0, 100, 1, Math.round(o.thin * 100) + '%')}
+        ${slider('stab', 'ثبات الخط', Math.round(o.stab * 100), 0, 100, 1, Math.round(o.stab * 100) + '%')}
+        <button class="btn small ghost" data-act="pen-reset">رجوع للإعدادات الأصلية</button>`;
+    return toolPanel('أداة القلم', body);
+  }
   function hlPanel() {
-    const o = ink.hlOpts, size = curSize('hl');
-    return `<div class="pp">
-      <div class="pp-types"><button class="pp-type ${o.tip === 'chisel' ? 'on' : ''}" data-act="hl-tip" data-s="chisel"><span class="tip-chisel"></span><span>رأس مسطح</span></button><button class="pp-type ${o.tip === 'round' ? 'on' : ''}" data-act="hl-tip" data-s="round"><span class="tip-round"></span><span>رأس دائري</span></button></div>
-      <canvas class="pp-prev" width="560" height="140"></canvas>
-      ${slider('hsize', 'السماكة', size, 1, 12, 0.1, size.toFixed(1))}
-      ${slider('alpha', 'الشفافية', Math.round(o.alpha * 100), 10, 80, 1, Math.round(o.alpha * 100) + '%')}
-      <label class="pp-row check"><input type="checkbox" data-pp="straight" ${o.straight ? 'checked' : ''}><span>خط مستقيم دائمًا</span></label>
-    </div>`;
+    const o = ink.hlOpts;
+    const body = ttab() === 'main'
+      ? `<div class="pt-label">الرأس</div>
+        <div class="pt-pens">${[['chisel', 'رأس مسطح'], ['round', 'رأس دائري']].map(([k, n]) => `<button class="pt-pen ${o.tip === k ? 'on' : ''}" data-act="hl-tip" data-s="${k}" title="${n}">${PEN_ART[k]}</button>`).join('')}
+          <button class="pt-gear" data-act="pt-tab" data-t="opts" title="الإعدادات">${ic('gear')}</button></div>
+        <div class="pt-sep"></div>${sizeRow('hl')}`
+      : `<div class="pt-label">إعدادات التظليل</div>
+        ${slider('alpha', 'الشفافية', Math.round(o.alpha * 100), 10, 80, 1, Math.round(o.alpha * 100) + '%')}
+        <label class="pp-row check"><input type="checkbox" data-pp="straight" ${o.straight ? 'checked' : ''}><span>خط مستقيم دائمًا</span></label>`;
+    return toolPanel('أداة التظليل', body);
   }
   // a sample stroke with the current settings, with pressure rising and falling along it
   function drawPreview() {
@@ -812,15 +865,16 @@ function renderNotebook(nb) {
     const c = cv.getContext('2d'), t = ink.tool;
     c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cv.width, cv.height);
     const pts = [];
-    for (let i = 0; i <= 80; i++) { const x = 40 + i * 6, y = 70 + Math.sin(i / 80 * Math.PI * 2) * 34; pts.push([x, y, t === 'hl' ? 0.5 : 0.15 + 0.8 * Math.sin(i / 80 * Math.PI)]); }
-    if (t === 'hl') { c.fillStyle = '#334155'; c.font = '600 22px "IBM Plex Sans Arabic", sans-serif'; c.textAlign = 'center'; c.fillText('نص مظلّل', 280, 78); }
+    for (let i = 0; i <= 80; i++) { const x = 60 + i * 6, y = 75 + Math.sin(i / 80 * Math.PI * 2) * 34; pts.push([x, y, t === 'hl' ? 0.5 : 0.15 + 0.8 * Math.sin(i / 80 * Math.PI)]); }
+    if (t === 'hl') { c.fillStyle = '#334155'; c.font = '600 22px "IBM Plex Sans Arabic", sans-serif'; c.textAlign = 'center'; c.fillText('نص مظلّل', 300, 83); }
     drawStroke(c, t === 'hl'
-      ? { tool: 'hl', style: 'hl', color: curColor('hl'), size: curSize('hl'), pts: [[110, 70, .5], [450, 70, .5]], o: { ...ink.hlOpts }, shape: 'line' }
+      ? { tool: 'hl', style: 'hl', color: curColor('hl'), size: curSize('hl'), pts: [[130, 75, .5], [470, 75, .5]], o: { ...ink.hlOpts }, shape: 'line' }
       : { tool: 'pen', style: ink.penStyle, color: curColor('pen'), size: curSize('pen'), pts, o: { ...ink.penOpts[ink.penStyle] } }, true);
   }
   function openPop(btn) {
     const t = ink.tool;
     let html = '';
+    if (btn) pop.dataset.tab = 'main';
     if (t === 'pen') html = penPanel();
     if (t === 'hl') html = hlPanel();
     if (t === 'eraser') html = `<button class="tb ${ink.eraser === 'stroke' ? 'on' : ''}" data-act="eraser-mode" data-m="stroke" title="يمسح الخط كامل">${ic('eraseStroke')}</button><button class="tb ${ink.eraser === 'part' ? 'on' : ''}" data-act="eraser-mode" data-m="part" title="يمسح الجزء اللي تمر عليه">${ic('erasePart')}</button><span class="tb-sep"></span><button class="tb ${ink.eraseHlOnly ? 'on' : ''}" data-act="erase-hl" title="يمسح التظليل فقط">${ic('eraseHl')}</button>`;
@@ -840,13 +894,18 @@ function renderNotebook(nb) {
   pop.addEventListener('input', e => {
     const el = e.target, k = el.dataset.pp; if (!k) return;
     const val = el.type === 'checkbox' ? el.checked : +el.value;
-    if (k === 'size') ink.sizes.pen[ink.sizeIdx.pen] = val;
-    else if (k === 'hsize') ink.sizes.hl[ink.sizeIdx.hl] = val;
+    if (k === 'mm') {
+      const tk = ink.tool === 'hl' ? 'hl' : 'pen', mm = tToMm(tk, val);
+      ink.sizes[tk][ink.sizeIdx[tk]] = Math.round(mm / MM[tk] * 100) / 100;
+      el.parentElement.querySelector('output').textContent = fmtMm(mm);
+      pop.querySelectorAll('.pt-size').forEach(b => b.classList.toggle('on', Math.abs(+b.dataset.mm - mm) < 0.005));
+      keepInkPrefs(); drawPreview(); bar(); return;
+    }
     else if (k === 'alpha') ink.hlOpts.alpha = val / 100;
     else if (k === 'straight') ink.hlOpts.straight = val;
     else ink.penOpts[ink.penStyle][k] = val / 100;
     const out = el.parentElement.querySelector('output');
-    if (out) out.textContent = ['size', 'hsize'].includes(k) ? val.toFixed(1) : val + '%';
+    if (out) out.textContent = val + '%';
     keepInkPrefs(); drawPreview(); bar();
   });
   function showPop(btn, html) {
@@ -1110,24 +1169,10 @@ function renderNotebook(nb) {
   }
   let liveFrom = 0, liveRaf = 0;
   function drawLive(v) {
-    const c = v.ctx.live, P = cur.pts;
-    if (cur.tool !== 'pen' || cur.shape) { clearLive(v); drawStroke(c, cur, true); return; }
-    const o = { ...(PEN_DEFAULTS[cur.style] || PEN_DEFAULTS.fountain), ...(cur.o || {}) }, size = cur.size * 1.15;
-    const real = P.some(q => q[2] !== 0.5);
-    const width = (q, i) => {
-      if (real) return Math.max(size * 0.08, 2 * size * (0.5 - o.thin * (0.5 - q[2])));
-      const d = i ? Math.hypot(q[0] - P[i - 1][0], q[1] - P[i - 1][1]) : 0;
-      return Math.max(size * 0.15, 2 * size * (0.5 - o.thin * (0.5 - Math.max(0, 1 - d / size) * 0.6)));
-    };
-    c.save(); c.strokeStyle = cur.color; c.fillStyle = cur.color; c.lineCap = 'round'; c.lineJoin = 'round';
-    if (P.length === 1) { c.beginPath(); c.arc(P[0][0], P[0][1], width(P[0], 0) / 2, 0, 7); c.fill(); }
-    for (let i = Math.max(1, liveFrom); i < P.length; i++) {
-      const a = P[i - 1], b = P[i], m0 = i > 1 ? [(P[i - 2][0] + a[0]) / 2, (P[i - 2][1] + a[1]) / 2] : a, m1 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-      c.lineWidth = width(a, i - 1);
-      c.beginPath(); c.moveTo(m0[0], m0[1]); c.quadraticCurveTo(a[0], a[1], m1[0], m1[1]); c.stroke();
-    }
-    liveFrom = P.length;
-    c.restore();
+    // the whole stroke is drawn again each frame with the same outline it will keep, so nothing
+    // jumps or changes when the pencil lifts
+    clearLive(v); drawStroke(v.ctx.live, cur, true);
+    liveFrom = cur.pts.length;
   }
   function eraserCursor(v, p) {
     const r = ink.eraser === 'part' ? curSize('eraser') : 12, c = v.ctx.live;
@@ -1368,6 +1413,12 @@ Object.assign(A, {
   'laser-mode': a => { ink.laserMode = a.dataset.m; keepInkPrefs(); inkApi.closePop(); inkApi.bar(); },
   'pen-style': a => { ink.penStyle = a.dataset.s; keepInkPrefs(); inkApi.bar(); inkApi.openPop(null); },
   'pen-reset': () => { ink.penOpts[ink.penStyle] = { ...PEN_DEFAULTS[ink.penStyle] }; ink.sizes.pen[ink.sizeIdx.pen] = [1.5, 3, 5.5][ink.sizeIdx.pen]; keepInkPrefs(); inkApi.bar(); inkApi.openPop(null); },
+  'pt-tab': a => { $('.ink-pop').dataset.tab = a.dataset.t; inkApi.openPop(null); },
+  'pt-preset': a => {
+    const k = ink.tool === 'hl' ? 'hl' : 'pen';
+    ink.sizes[k][ink.sizeIdx[k]] = Math.round(+a.dataset.mm / (k === 'hl' ? 0.21 * 5.2 : 0.21 * 1.15) * 100) / 100;
+    keepInkPrefs(); inkApi.bar(); inkApi.openPop(null);
+  },
   'hl-tip': a => { ink.hlOpts.tip = a.dataset.s; keepInkPrefs(); inkApi.openPop(null); },
   'eraser-mode': a => { ink.eraser = a.dataset.m; keepInkPrefs(); inkApi.closePop(); inkApi.bar(); },
   'erase-hl': () => { ink.eraseHlOnly = !ink.eraseHlOnly; keepInkPrefs(); inkApi.closePop(); inkApi.bar(); toast(ink.eraseHlOnly ? 'الممحاة تمسح التظليل فقط' : 'الممحاة تمسح كل شي'); },
