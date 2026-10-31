@@ -1,0 +1,29 @@
+name: Release new versions
+
+# a new version number in package.json on main becomes a release, and installed apps update from it
+on:
+  push:
+    branches: [main]
+    paths: [package.json]
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DESKTOP_ID: ${{ secrets.MADAR_GOOGLE_DESKTOP_ID }}
+      DESKTOP_SECRET: ${{ secrets.MADAR_GOOGLE_DESKTOP_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          tag="v$(node -p "require('./package.json').version")"
+          if gh release view "$tag" >/dev/null 2>&1; then echo "$tag already released"; exit 0; fi
+          # a build without the keys would turn sync off on every computer that updates to it
+          if [ -z "$DESKTOP_ID" ] || [ -z "$DESKTOP_SECRET" ]; then echo "::error::Google secrets are missing"; exit 1; fi
+          gh release create "$tag" --target "$GITHUB_SHA" --title "مدار ${tag#v}" --generate-notes
+          # releases made with this token don't start other workflows by themselves
+          gh workflow run release.yml -f tag="$tag"

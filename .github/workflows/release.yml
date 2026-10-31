@@ -34,7 +34,9 @@ jobs:
           DESKTOP_ID: ${{ secrets.MADAR_GOOGLE_DESKTOP_ID }}
           DESKTOP_SECRET: ${{ secrets.MADAR_GOOGLE_DESKTOP_SECRET }}
           IOS_ID: ${{ secrets.MADAR_GOOGLE_IOS_ID }}
-        run: node -e "const e=process.env;require('fs').writeFileSync('src/google-config.local.js','window.MADAR_GOOGLE_LOCAL='+JSON.stringify({desktopId:e.DESKTOP_ID||'',desktopSecret:e.DESKTOP_SECRET||'',iosId:e.IOS_ID||''})+';\n')"
+        run: |
+          if [ -z "$DESKTOP_ID" ] || [ -z "$DESKTOP_SECRET" ]; then echo "::error::Google secrets are missing"; exit 1; fi
+          node -e "const e=process.env;require('fs').writeFileSync('src/google-config.local.js','window.MADAR_GOOGLE_LOCAL='+JSON.stringify({desktopId:e.DESKTOP_ID||'',desktopSecret:e.DESKTOP_SECRET||'',iosId:e.IOS_ID||''})+';\n')"
       # Spotlight indexing keeps the dmg volume busy on GitHub's Mac runners
       - run: sudo mdutil -a -i off || true
       # Apple Silicon only
@@ -62,7 +64,9 @@ jobs:
           DESKTOP_ID: ${{ secrets.MADAR_GOOGLE_DESKTOP_ID }}
           DESKTOP_SECRET: ${{ secrets.MADAR_GOOGLE_DESKTOP_SECRET }}
           IOS_ID: ${{ secrets.MADAR_GOOGLE_IOS_ID }}
-        run: node -e "const e=process.env;require('fs').writeFileSync('src/google-config.local.js','window.MADAR_GOOGLE_LOCAL='+JSON.stringify({desktopId:e.DESKTOP_ID||'',desktopSecret:e.DESKTOP_SECRET||'',iosId:e.IOS_ID||''})+';\n')"
+        run: |
+          if [ -z "$DESKTOP_ID" ] || [ -z "$DESKTOP_SECRET" ]; then echo "::error::Google secrets are missing"; exit 1; fi
+          node -e "const e=process.env;require('fs').writeFileSync('src/google-config.local.js','window.MADAR_GOOGLE_LOCAL='+JSON.stringify({desktopId:e.DESKTOP_ID||'',desktopSecret:e.DESKTOP_SECRET||'',iosId:e.IOS_ID||''})+';\n')"
       - run: npx electron-builder --win nsis --x64 --publish never
       # start the built app once and make sure every section opens and saves
       - name: Smoke test
