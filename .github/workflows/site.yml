@@ -30,6 +30,11 @@ jobs:
           cache: npm
       # the libraries in src/vendor are copied in on install
       - run: npm ci
+      # only the website's own sign-in ID, which is public by design; never the desktop secret
+      - name: Google sign-in config
+        env:
+          WEB_ID: ${{ secrets.MADAR_GOOGLE_WEB_ID }}
+        run: node -e "require('fs').writeFileSync('src/google-config.local.js','window.MADAR_GOOGLE_LOCAL='+JSON.stringify({webId:process.env.WEB_ID||''})+';\n')"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: src

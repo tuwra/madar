@@ -10,7 +10,8 @@ const cloud = { status: 'off', email: '', lastSync: 0, error: '', busy: false, f
 const SCOPE = 'https://www.googleapis.com/auth/drive.file openid email';
 const CAL_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
 // `test` lets the browser test suite run the sync against a fake Drive
-const configured = () => GCFG.test || (isIOS ? !!GCFG.iosId : desktop ? !!(GCFG.desktopId && GCFG.desktopSecret) : false);
+const isWeb = !isIOS && !desktop;
+const configured = () => GCFG.test || (isIOS ? !!GCFG.iosId : desktop ? !!(GCFG.desktopId && GCFG.desktopSecret) : !!GCFG.webId);
 
 /* ---------- tokens ---------- */
 const tokens = {
@@ -43,8 +44,37 @@ async function tokenRequest(params) {
   if (!res.ok) throw new Error(j.error_description || j.error || 'token error');
   return j;
 }
+/* ---------- the website: a browser can't keep a client secret, so Google hands it a short-lived
+ * token directly. It lasts about an hour and is renewed by a quick silent trip to Google. */
+function webAuthUrl(withCal, silent) {
+  const st = rand(16);
+  try { sessionStorage.setItem('madar-oauth', JSON.stringify({ st, withCal })); } catch { /* private mode */ }
+  return 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+    client_id: GCFG.webId, redirect_uri: location.origin + location.pathname.replace(/index\.html$/, ''), response_type: 'token',
+    scope: withCal ? `${SCOPE} ${CAL_SCOPE}` : SCOPE, state: st, include_granted_scopes: 'true',
+    ...(silent ? { prompt: 'none', login_hint: tok?.email || '' } : { prompt: 'select_account' }),
+  });
+}
+function webGo(withCal, silent) { if (typeof state !== 'undefined' && state) flush(); location.href = webAuthUrl(withCal, silent); }
+const webExpired = () => isWeb && !GCFG.test && tok && !(tok.exp > Date.now() + 60000);
+// Google comes back to the page with the token in the address
+async function webReturn() {
+  if (!isWeb || !location.hash.includes('state=')) return;
+  const q = new URLSearchParams(location.hash.slice(1));
+  let saved = null; try { saved = JSON.parse(sessionStorage.getItem('madar-oauth') || 'null'); sessionStorage.removeItem('madar-oauth'); } catch { /* ignore */ }
+  history.replaceState(null, '', location.pathname + location.search);
+  if (!saved || saved.st !== q.get('state')) return;
+  const access = q.get('access_token');
+  if (!access) return; // the silent renewal needs the user: the sync box asks them to sign in again
+  let email = tok?.email || '';
+  try { email = (await (await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: `Bearer ${access}` } })).json()).email || email; } catch { /* name only */ }
+  tok = { access, exp: Date.now() + (+q.get('expires_in') || 3600) * 1000, email, cal: !!saved.withCal };
+  await tokens.save(tok);
+  try { sessionStorage.removeItem('madar-silent'); } catch { /* ignore */ }
+}
 async function signIn(withCal = !!tok?.cal) {
   if (!configured()) return ask('المزامنة ما انعدّت في هذي النسخة للحين.', null);
+  if (isWeb && !GCFG.test) return webGo(withCal, false);
   const c = client(), verifier = rand(48);
   const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
   let redirect = c.redirect, code;
@@ -96,6 +126,7 @@ async function accessToken() {
   if (!tok) throw new Error('signed out');
   if (GCFG.test) return 'test';
   if (tok.access && tok.exp > Date.now() + 60000) return tok.access;
+  if (isWeb) throw new Error('انتهت جلسة قوقل. سجّل دخول مرة ثانية');
   const t = await tokenRequest({ refresh_token: tok.refresh, grant_type: 'refresh_token' });
   tok = { ...tok, access: t.access_token, exp: Date.now() + t.expires_in * 1000 };
   await tokens.save(tok);
@@ -283,6 +314,7 @@ function cloudSection() {
   if (!tok) return `<div id="cloud-box" class="store-now"><b>زامن الماك والويندوز والآيباد والآيفون</b>
     <div class="hint">سجّل دخول بحساب قوقل في كل جهاز، وبياناتك تتزامن بينها عن طريق مجلد «Madar Sync» في قوقل درايف حقك.</div>
     <button class="btn primary" data-act="cloud-signin" type="button">تسجيل الدخول بقوقل</button></div>`;
+  if (webExpired()) return `<div id="cloud-box" class="store-now"><b>انتهت جلسة قوقل</b><div class="hint">${esc(cloud.email)}. بياناتك هنا محفوظة، سجّل دخول عشان تكمل المزامنة.</div><button class="btn primary" data-act="cloud-signin" type="button">تسجيل الدخول بقوقل</button></div>`;
   return `<div id="cloud-box" class="store-now ${cloud.status === 'error' ? '' : 'ok'}"><b>${cloud.status === 'syncing' ? 'يزامن…' : cloud.status === 'error' ? 'المزامنة متوقفة' : '✓ متزامن عن طريق قوقل'}</b>
     <div class="hint">${esc(cloud.email)}${when ? ' · آخر مزامنة ' + when : ''}${cloud.error ? ' · ' + esc(cloud.error) : ''}</div>
     <div class="row wrap"><button class="btn small" data-act="cloud-sync" type="button">زامن الحين</button><button class="btn small ghost danger" data-act="cloud-signout" type="button">تسجيل الخروج</button></div>
@@ -333,8 +365,20 @@ A['cloud-signin'] = () => signIn();
 A['cloud-sync'] = () => syncNow(true);
 A['cloud-signout'] = () => ask('تسجّل الخروج؟ بياناتك تبقى على هذا الجهاز وفي قوقل درايف، بس ما راح تتزامن.', 'تسجيل الخروج', signOut);
 
+// back on the website after a while with an old token: renew it
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !webExpired() || !configured()) return;
+  if (document.activeElement?.isContentEditable || /INPUT|TEXTAREA/.test(document.activeElement?.tagName || '') || $('#dlg')?.open) return;
+  try { if (sessionStorage.getItem('madar-silent') === '1') return; sessionStorage.setItem('madar-silent', '1'); } catch { return; }
+  webGo(!!tok.cal, true);
+});
+
 window.madarCloudTest = { setToken: t => { tok = t; }, syncNow, cloud };
 (async () => {
   tok = await tokens.load();
+  const back = isWeb && location.hash.includes('state=');
+  await webReturn();
+  // an expired website session renews itself once per visit; if Google needs the user, the box says so
+  if (webExpired() && !back && configured()) { let tried = false; try { tried = sessionStorage.getItem('madar-silent') === '1'; sessionStorage.setItem('madar-silent', '1'); } catch { tried = true; } if (!tried) return webGo(!!tok.cal, true); }
   if (tok && configured()) { cloud.email = tok.email || ''; cloud.lastSync = state?.sync?.lastSync || 0; setStatus('ok'); startSyncLoop(); setTimeout(() => syncNow(), 2500); setTimeout(() => syncCalendar(), 4000); }
 })();
