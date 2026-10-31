@@ -130,7 +130,7 @@ function render() {
   // an open notebook gets the whole screen, like GoodNotes; its back button brings the sidebar back
   $('#app').classList.toggle('focus', ui.view === 'ink' && !!ui.notebookId);
   $$('#nav [data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === ui.view));
-  ({ today: renderToday, tasks: renderTasks, habits: renderHabits, calendar: renderCalendar, notes: renderNotes, ink: renderInk })[ui.view]();
+  ({ today: renderToday, tasks: renderTasks, habits: renderHabits, focus: renderFocus, calendar: renderCalendar, notes: renderNotes, ink: renderInk })[ui.view]();
   try { localStorage.setItem('madar-ui', JSON.stringify({ view: ui.view, taskFilter: ui.taskFilter, pageId: ui.pageId, notebookId: ui.notebookId, inkPage: ui.inkPage })); } catch { /* ignore */ }
 }
 function go(v, extra = {}) { Object.assign(ui, { view: v }, extra); view.scrollTop = 0; render(); }
@@ -215,6 +215,7 @@ function taskDialog(id) {
 }
 function eventDialog(id, day, start = '09:00', end = '10:00') {
   const ev = id ? state.events.find(x => x.id === id) : { title: '', date: day || todayStr(), start, end, color: COLORS[1] };
+  if (ev.gcal) return ask(`«${esc(ev.title)}» موعد من تقويم قوقل. تعدّله من تقويم قوقل نفسه.`, null);
   openDialog(`<h3>${id ? 'تعديل الموعد' : 'موعد جديد'}</h3>
     <input name="title" class="title-input" value="${esc(ev.title)}" placeholder="عنوان الموعد" required autofocus>
     <label>التاريخ<input type="date" name="date" value="${ev.date}" required></label>

@@ -14,13 +14,14 @@ function taskRow(t, { showList = true } = {}) {
     <button class="check p${t.priority}" data-act="toggle" aria-label="إنجاز"></button>
     <div class="task-body" data-act="task-open">
       <div class="task-title" data-act="task-open">${esc(t.title)}</div>
-      <div class="task-meta">${t.due ? `<span class="chip ${late ? 'late' : ''}">${dueLabel(t)}</span>` : ''}${t.repeat ? `<span class="chip rep-chip">🔁 ${repeatLabel(t.repeat)}</span>` : ''}${subs.length ? `<span class="chip sub-chip"><span class="mini-bar"><i style="width:${doneSubs / subs.length * 100}%"></i></span>${doneSubs}/${subs.length}</span>` : ''}${showList && l.id !== 'inbox' ? `<span class="chip"><span class="dot" style="--c:${l.color}"></span>${esc(l.name)}</span>` : ''}${t.notes ? '<span class="chip">📝</span>' : ''}</div>
+      <div class="task-meta">${t.due ? `<span class="chip ${late ? 'late' : ''}">${dueLabel(t)}</span>` : ''}${t.repeat ? `<span class="chip rep-chip">🔁 ${repeatLabel(t.repeat)}</span>` : ''}${subs.length ? `<span class="chip sub-chip"><span class="mini-bar"><i style="width:${doneSubs / subs.length * 100}%"></i></span>${doneSubs}/${subs.length}</span>` : ''}${showList && l.id !== 'inbox' ? `<span class="chip"><span class="dot" style="--c:${l.color}"></span>${esc(l.name)}</span>` : ''}${t.notes ? '<span class="chip">📝</span>' : ''}${focusChips(t)}</div>
       ${open ? `<div class="subs" data-stop>
         ${subs.map(s => `<div class="sub ${s.done ? 'done' : ''}" data-sub="${s.id}"><button class="check small" data-act="sub-toggle" aria-label="إنجاز"></button><span class="sub-text" contenteditable="true" data-sub-edit spellcheck="false">${esc(s.text)}</span><button class="x" data-act="sub-del" aria-label="حذف">×</button></div>`).join('')}
         <form class="sub-add" data-sub-form><input placeholder="أضف مهمة فرعية…" autocomplete="off"></form>
         <div class="sub-tools"><button class="btn small ghost" data-act="edit">تفاصيل المهمة</button></div>
       </div>` : ''}
     </div>
+    ${t.done ? '' : '<button class="task-focus" data-act="focus-task" aria-label="ابدأ تركيز" title="ابدأ تركيز">▶</button>'}
     <button class="task-more" data-act="task-menu" aria-label="خيارات">⋯</button>
   </div>`;
 }
@@ -67,6 +68,7 @@ function renderToday() {
       <button class="stat ${late.length ? 'warn' : ''}" data-act="go-filter" data-f="today"><b>${late.length}</b><span>متأخرة</span></button>
       <button class="stat" data-act="go" data-view="calendar"><b>${evCount}</b><span>مواعيد اليوم</span></button>
     </div></div>
+    ${planBar()}
     <div class="dash-grid">
       <section class="card tasks-card">
         <div class="card-top">${ring(pct)}<div><b>${all.length ? (done === all.length ? 'خلّصت كل مهام اليوم 🎉' : `أنجزت ${done} من ${all.length}`) : 'يومك فاضي'}</b><small>${all.length && done < all.length ? 'كمّل، باقي شوي' : 'أضف شي تبي تسويه'}</small></div></div>
@@ -353,6 +355,7 @@ function setupWeekDrag(colsEl) {
     try { colsEl.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
     if (evEl) {
       const ev = state.events.find(x => x.id === evEl.dataset.ev);
+      if (ev.gcal) { eventDialog(ev.id); return; }
       op = { kind: e.target.closest('.wk-rs') ? 'resize' : 'move', ev, el: evEl, x0: e.clientX, y0: e.clientY, s: minutes(ev.start), en: minutes(ev.end || hhmm(minutes(ev.start) + 60)), moved: false };
       evEl.classList.add('lift');
     } else {

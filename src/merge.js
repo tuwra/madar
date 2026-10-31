@@ -7,7 +7,7 @@
  * Pure functions, no DOM: shared by the app and its tests.
  */
 (function (root) {
-  const COLLECTIONS = ['lists', 'tasks', 'events', 'pages', 'habits'];
+  const COLLECTIONS = ['lists', 'tasks', 'events', 'pages', 'habits', 'sessions', 'days'];
 
   function fnv(str) { // fast fingerprint of a string
     let h = 0x811c9dc5;

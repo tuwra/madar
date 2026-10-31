@@ -58,6 +58,7 @@ const ICON = {
   mark: '<path d="M7 4.5h10v15l-5-3.6-5 3.6z"/>',
   markOn: '<path d="M7 4.5h10v15l-5-3.6-5 3.6z" fill="currentColor"/>',
   addPage: '<path d="M13.5 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9z"/><path d="M13.5 3.5V9H19"/><path d="M12 12v5M9.5 14.5h5"/>',
+  toTask: '<rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M8 12l3 3 5-6"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/><circle cx="12" cy="12" r="6.3"/>',
   tune: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   more: '<circle cx="6" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="18" cy="12" r="1.3" fill="currentColor"/>',
@@ -736,7 +737,7 @@ function renderNotebook(nb) {
       ${o.moving ? '' : `<div class="sel-bar" style="left:${Math.max(0, x)}px;top:${Math.max(-6, y - 50)}px">
         ${colors.map(c => `<button class="cslot small" style="--c:${c}" data-act="sel-color" data-c="${c}" aria-label="لون"></button>`).join('')}
         <span class="tb-sep"></span>
-        <button class="tb small" data-act="sel-dup" title="تكرار">${ic('dup')}</button><button class="tb small" data-act="sel-cut" title="قص">${ic('cut')}</button><button class="tb small danger" data-act="sel-del" title="حذف">${ic('trash')}</button></div>`}`;
+        <button class="tb small" data-act="sel-task" title="حوّلها لمهمة">${ic('toTask')}</button><button class="tb small" data-act="sel-dup" title="تكرار">${ic('dup')}</button><button class="tb small" data-act="sel-cut" title="قص">${ic('cut')}</button><button class="tb small danger" data-act="sel-del" title="حذف">${ic('trash')}</button></div>`}`;
   }
   function selectIn(v, poly) {
     const strokes = new Set(v.pg.strokes.filter(s => s.pts.filter(p => inPoly(p, poly)).length >= s.pts.length * 0.5));
@@ -1440,6 +1441,20 @@ Object.assign(A, {
   },
   'ink-more': () => pageDialog(inkApi.nb, ui.inkPage),
   'thumb-menu': a => pageDialog(inkApi.nb, +a.dataset.i),
+  // handwriting isn't read automatically, so the title is typed; the task links back to this page
+  'sel-task': () => {
+    const s = ink.sel; if (!s || !inkApi) return;
+    const nb = inkApi.nb, pg = s.pg, b = s.box, cv = document.createElement('canvas'), k = Math.min(2, 560 / Math.max(1, b.w));
+    cv.width = Math.max(1, b.w * k); cv.height = Math.min(240, Math.max(1, b.h * k));
+    const c = cv.getContext('2d'); c.fillStyle = '#fff'; c.fillRect(0, 0, cv.width, cv.height); c.scale(k, k); c.translate(-b.x, -b.y);
+    for (const st of s.strokes) drawStroke(c, st);
+    openDialog(`<h3>مهمة من هذا الجزء</h3><img class="sel-task-img" src="${cv.toDataURL('image/png')}" alt="">
+      <input name="title" class="title-input" placeholder="اكتب المهمة…" required autofocus>
+      <label>التاريخ<input type="date" name="due" value="${todayStr()}"></label>${actions(false)}`, fd => {
+      state.tasks.push({ ...newTask(fd.get('title').trim(), 'inbox', fd.get('due') || null, 0), link: { nb: nb.id, pg: pg.id } });
+      save(); toast('صارت مهمة، ومربوطة بهذي الصفحة');
+    });
+  },
   'sel-del': () => {
     const s = ink.sel; if (!s || !inkApi) return;
     const pg = s.pg; inkApi.pushUndo(pg);

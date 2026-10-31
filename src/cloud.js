@@ -8,6 +8,7 @@ const GCFG = window.MADAR_GOOGLE || {};
 const isIOS = !!window.Capacitor?.isNativePlatform?.();
 const cloud = { status: 'off', email: '', lastSync: 0, error: '', busy: false, folder: null, files: null, timer: null, dirtyTimer: null };
 const SCOPE = 'https://www.googleapis.com/auth/drive.file openid email';
+const CAL_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
 // `test` lets the browser test suite run the sync against a fake Drive
 const configured = () => GCFG.test || (isIOS ? !!GCFG.iosId : desktop ? !!(GCFG.desktopId && GCFG.desktopSecret) : false);
 
@@ -42,7 +43,7 @@ async function tokenRequest(params) {
   if (!res.ok) throw new Error(j.error_description || j.error || 'token error');
   return j;
 }
-async function signIn() {
+async function signIn(withCal = !!tok?.cal) {
   if (!configured()) return ask('المزامنة ما انعدّت في هذي النسخة للحين.', null);
   const c = client(), verifier = rand(48);
   const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
@@ -51,7 +52,7 @@ async function signIn() {
   try {
     if (!isIOS) redirect = `http://127.0.0.1:${await desktop.oauth.listen()}`;
     const url = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
-      client_id: c.id, redirect_uri: redirect, response_type: 'code', scope: SCOPE, access_type: 'offline', prompt: 'consent',
+      client_id: c.id, redirect_uri: redirect, response_type: 'code', scope: withCal ? `${SCOPE} ${CAL_SCOPE}` : SCOPE, access_type: 'offline', prompt: 'consent',
       code_challenge: challenge, code_challenge_method: 'S256',
     });
     if (isIOS) {
@@ -74,11 +75,12 @@ async function signIn() {
     }
     const t = await tokenRequest({ code, code_verifier: verifier, redirect_uri: redirect, grant_type: 'authorization_code' });
     const email = t.id_token ? JSON.parse(atob(t.id_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).email : '';
-    tok = { refresh: t.refresh_token, access: t.access_token, exp: Date.now() + t.expires_in * 1000, email };
+    tok = { refresh: t.refresh_token, access: t.access_token, exp: Date.now() + t.expires_in * 1000, email, cal: withCal };
     await tokens.save(tok);
     cloud.email = email;
     toast('سجّلت دخول بقوقل. أبدأ المزامنة…');
     startSyncLoop(); syncNow();
+    if (withCal) syncCalendar(true);
   } catch (e) {
     setStatus(tok ? 'ok' : 'off', e.message === 'cancelled' ? '' : e.message);
     if (e.message !== 'cancelled') toast('ما زبط تسجيل الدخول: ' + e.message, 4000);
@@ -283,8 +285,50 @@ function cloudSection() {
     <button class="btn primary" data-act="cloud-signin" type="button">تسجيل الدخول بقوقل</button></div>`;
   return `<div id="cloud-box" class="store-now ${cloud.status === 'error' ? '' : 'ok'}"><b>${cloud.status === 'syncing' ? 'يزامن…' : cloud.status === 'error' ? 'المزامنة متوقفة' : '✓ متزامن عن طريق قوقل'}</b>
     <div class="hint">${esc(cloud.email)}${when ? ' · آخر مزامنة ' + when : ''}${cloud.error ? ' · ' + esc(cloud.error) : ''}</div>
-    <div class="row wrap"><button class="btn small" data-act="cloud-sync" type="button">زامن الحين</button><button class="btn small ghost danger" data-act="cloud-signout" type="button">تسجيل الخروج</button></div></div>`;
+    <div class="row wrap"><button class="btn small" data-act="cloud-sync" type="button">زامن الحين</button><button class="btn small ghost danger" data-act="cloud-signout" type="button">تسجيل الخروج</button></div>
+    <div class="row wrap" style="margin-top:8px">${tok.cal ? '<span class="hint grow">✓ تقويم قوقل مربوط</span><button class="btn small" data-act="gcal-refresh" type="button">حدّث المواعيد</button><button class="btn small ghost" data-act="gcal-off" type="button">فصل</button>' : '<button class="btn small" data-act="gcal-on" type="button">ربط تقويم قوقل</button><span class="hint grow">مواعيدك تظهر في مدار، للقراءة فقط</span>'}</div></div>`;
 }
+/* ---------- Google Calendar: read only, kept as events marked `gcal` ---------- */
+let calBusy = false, calLast = 0;
+async function syncCalendar(manual = false) {
+  if (!tok?.cal || calBusy || (!manual && Date.now() - calLast < 15 * 60000)) return;
+  calBusy = true;
+  try {
+    const td = parseYmd(todayStr()), from = new Date(td); from.setDate(from.getDate() - 14);
+    const to = new Date(td); to.setDate(to.getDate() + 120);
+    const API = 'https://www.googleapis.com/calendar/v3';
+    const list = await (await gfetch(`${API}/users/me/calendarList`)).json();
+    const out = [];
+    for (const c of (list.items || []).filter(x => x.selected !== false)) {
+      const q = new URLSearchParams({ singleEvents: 'true', orderBy: 'startTime', maxResults: '500', timeMin: from.toISOString(), timeMax: to.toISOString() });
+      const j = await (await gfetch(`${API}/calendars/${encodeURIComponent(c.id)}/events?${q}`)).json();
+      for (const e of j.items || []) out.push(...calEvents(e, c.backgroundColor));
+    }
+    state.events = [...state.events.filter(e => !e.gcal), ...out];
+    calLast = Date.now(); save();
+    if (['today', 'calendar'].includes(ui.view)) render();
+    if (manual) toast(`تحدّثت مواعيد تقويم قوقل (${out.length})`);
+  } catch (e) {
+    if (manual) ask(/40[13]/.test(e.message) ? 'قوقل رفض طلب التقويم. تأكد إن «Google Calendar API» مفعّل في مشروعك على Google Cloud، وبعدها اربط التقويم مرة ثانية.' : 'ما قدرت أجيب المواعيد: ' + esc(e.message), null);
+  } finally { calBusy = false; }
+}
+// an all-day event of several days becomes one entry per day
+function calEvents(e, color) {
+  if (e.status === 'cancelled') return [];
+  const base = { title: e.summary || 'بدون عنوان', color: color || COLORS[1], gcal: true, created: 0 };
+  if (e.start?.date) {
+    const out = [];
+    for (let d = e.start.date, i = 0; d < e.end.date && i < 31; d = addDays(d, 1), i++) out.push({ ...base, id: `g_${e.id}_${i}`, date: d, start: '', end: '' });
+    return out;
+  }
+  const s = new Date(e.start.dateTime), en = new Date(e.end.dateTime), hm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return [{ ...base, id: `g_${e.id}`, date: ymd(s), start: hm(s), end: ymd(en) === ymd(s) ? hm(en) : '23:59' }];
+}
+A['gcal-on'] = () => { dlg.close(); signIn(true); };
+A['gcal-refresh'] = () => syncCalendar(true);
+A['gcal-off'] = async () => { tok.cal = false; await tokens.save(tok); state.events = state.events.filter(e => !e.gcal); save(); dlg.close(); render(); toast('فصلت تقويم قوقل'); };
+setInterval(() => syncCalendar(), 5 * 60000);
+
 A['cloud-signin'] = () => signIn();
 A['cloud-sync'] = () => syncNow(true);
 A['cloud-signout'] = () => ask('تسجّل الخروج؟ بياناتك تبقى على هذا الجهاز وفي قوقل درايف، بس ما راح تتزامن.', 'تسجيل الخروج', signOut);
@@ -292,5 +336,5 @@ A['cloud-signout'] = () => ask('تسجّل الخروج؟ بياناتك تبق�
 window.madarCloudTest = { setToken: t => { tok = t; }, syncNow, cloud };
 (async () => {
   tok = await tokens.load();
-  if (tok && configured()) { cloud.email = tok.email || ''; cloud.lastSync = state?.sync?.lastSync || 0; setStatus('ok'); startSyncLoop(); setTimeout(() => syncNow(), 2500); }
+  if (tok && configured()) { cloud.email = tok.email || ''; cloud.lastSync = state?.sync?.lastSync || 0; setStatus('ok'); startSyncLoop(); setTimeout(() => syncNow(), 2500); setTimeout(() => syncCalendar(), 4000); }
 })();
