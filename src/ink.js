@@ -166,15 +166,19 @@ function outlinePath(P, radii) {
 function penPath(s) {
   const o = { ...(PEN_DEFAULTS[s.style] || PEN_DEFAULTS.fountain), ...(s.o || {}) };
   const size = s.size * 1.15; // nib diameter
-  const P = streamline(s.pts, 0.12 + o.stab * 0.72, Math.max(0.15, size * 0.06));
+  const P = streamline(s.pts, 0.12 + o.stab * 0.72, Math.max(0.5, size * 0.28));
   const real = s.pts.some(p => p[2] !== 0.5);
   const len = [0]; for (let i = 1; i < P.length; i++) len.push(len[i - 1] + dist(P[i], P[i - 1]));
   const total = len[len.length - 1], tl = o.sharp * size * 7;
   const ease = t => t * (2 - t);
-  let pr = real ? P[0][2] : 0.35;
+  // pressure changes the width slowly, over a few nib widths of travel, so the line never wobbles;
+  // a light hand still gets a full line, as a Pencil reports very little pressure in normal writing
+  const lift = p => Math.min(1, 0.38 + p * 0.75);
+  let pr = real ? lift(P[0][2]) : 0.5;
   const radii = P.map((p, i) => {
-    if (real) pr += (p[2] - pr) * 0.45;
-    else { const d = i ? dist(p, P[i - 1]) : 0, sp = Math.min(1, d / size), rp = Math.min(1, 1 - sp); pr = Math.min(1, pr + (rp - pr) * sp * 0.275); }
+    const d = i ? dist(p, P[i - 1]) : 0;
+    if (real) pr += (lift(p[2]) - pr) * Math.min(1, d / (size * 3));
+    else { const sp = Math.min(1, d / size), rp = Math.min(1, 1 - sp); pr = Math.min(1, pr + (rp - pr) * sp * 0.275); }
     let r = size * (0.5 - o.thin * (0.5 - pr));
     if (tl > 0) { r *= ease(Math.min(1, 0.15 + len[i] / tl)); r *= ease(Math.min(1, 0.15 + (total - len[i]) / tl)); }
     return Math.max(size * 0.04, r);
@@ -182,19 +186,22 @@ function penPath(s) {
   const C = curve(P.map((p, i) => [p[0], p[1], radii[i]]), Math.max(0.3, size * 0.3));
   return outlinePath(C, C.map(q => q[2]));
 }
-// a Catmull-Rom curve through the points, so fast writing comes out round instead of in
-// straight pieces; the third value (the width) is blended along with it
+// a smooth curve using each point as the control of a curve between midpoints, like the laser:
+// fast writing comes out round and the tiny shake of the pencil's readings doesn't show.
+// The third value (the width) is blended along with it
 function curve(P, step) {
   if (P.length < 3) return P;
   const out = [P[0]];
-  const f = (a, b, c, d, t) => 0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (3 * b - a - 3 * c + d) * t * t * t);
-  for (let i = 0; i < P.length - 1; i++) {
-    const p0 = P[i - 1] || P[i], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2] || p2;
-    const n = Math.min(16, Math.ceil(dist(p1, p2) / step));
+  const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+  let from = P[0];
+  for (let i = 1; i < P.length; i++) {
+    const ctl = P[i], to = i === P.length - 1 ? P[i] : mid(P[i], P[i + 1]);
+    const n = Math.min(16, Math.max(1, Math.ceil((dist(from, ctl) + dist(ctl, to)) / step)));
     for (let j = 1; j <= n; j++) {
-      const t = j / n;
-      out.push([f(p0[0], p1[0], p2[0], p3[0], t), f(p0[1], p1[1], p2[1], p3[1], t), p1[2] + (p2[2] - p1[2]) * t]);
+      const t = j / n, u = 1 - t;
+      out.push([u * u * from[0] + 2 * u * t * ctl[0] + t * t * to[0], u * u * from[1] + 2 * u * t * ctl[1] + t * t * to[1], u * u * from[2] + 2 * u * t * ctl[2] + t * t * to[2]]);
     }
+    from = to;
   }
   return out;
 }
@@ -1027,9 +1034,12 @@ function renderNotebook(nb) {
 
   /* input */
   const fingerPans = () => ink.finger === 'pan' || (ink.finger === 'auto' && ink.penSeen);
+  let penActive = false, lastPressure = 0.5;
   const pt = (e, v) => {
     const r = v.el.getBoundingClientRect();
-    const pr = e.pointerType === 'pen' ? (e.pressure || 0.5) : 0.5;
+    // some browsers leave the type or the pressure out of the coalesced events
+    const pr = (e.pointerType === 'pen' || penActive) ? (e.pressure || lastPressure) : 0.5;
+    if (e.pressure) lastPressure = e.pressure;
     return [Math.round((e.clientX - r.left) / scale * 100) / 100, Math.round((e.clientY - r.top) / scale * 100) / 100, Math.round(pr * 100) / 100];
   };
   const touches = new Map();
@@ -1141,6 +1151,7 @@ function renderNotebook(nb) {
       }
       return;
     }
+    penActive = e.pointerType === 'pen'; if (e.pressure) lastPressure = e.pressure;
     const v = act, evs = (e.getCoalescedEvents && e.getCoalescedEvents().length) ? e.getCoalescedEvents() : [e];
     const p = pt(e, v);
     if (mode === 'pen' || mode === 'hl') {
