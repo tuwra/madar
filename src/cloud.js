@@ -178,7 +178,7 @@ const blobName = key => 'b_' + String(key).replace(/[^a-zA-Z0-9_-]/g, '_');
 function blobKeys(st) {
   const keys = new Set();
   for (const p of st.pages || []) { if (p.cover?.img) keys.add(p.cover.img); for (const b of p.blocks || []) if (b.blob) keys.add(b.blob); }
-  for (const nb of st.notebooks || []) { if (nb.pdf) keys.add(nb.pdf); for (const pg of nb.pages || []) for (const it of pg.items || []) if (it.blob) keys.add(it.blob); }
+  for (const nb of st.notebooks || []) { if (nb.localOnly) continue; if (nb.pdf) keys.add(nb.pdf); for (const pg of nb.pages || []) for (const it of pg.items || []) if (it.blob) keys.add(it.blob); }
   return keys;
 }
 function userIsEditing() {
@@ -186,16 +186,6 @@ function userIsEditing() {
   return !!(a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) || $('#dlg').open;
 }
 let pendingRender = false;
-function firstSyncChoice() {
-  return new Promise(resolve => {
-    let answered = false;
-    openDialog(`<h3>لقيت بياناتك في قوقل درايف</h3>
-      <p class="note">هذا الجهاز فيه بيانات بعد. وش تبي نسوي؟</p>
-      <button class="btn primary" value="cloud">استخدم البيانات اللي في قوقل درايف (مستحسن لجهاز جديد)</button>
-      <button class="btn" value="merge">ادمجها مع بيانات هذا الجهاز</button>`, (fd, v) => { answered = true; resolve(v === 'merge' ? 'merge' : 'cloud'); });
-    dlg.addEventListener('close', () => { if (!answered) resolve('merge'); }, { once: true });
-  });
-}
 async function syncNow(manual = false) {
   if (!tok || cloud.busy || !configured()) return;
   cloud.busy = true; setStatus('syncing');
@@ -218,17 +208,7 @@ async function syncNow(manual = false) {
       }));
     }
     let changedHere = 0;
-    if (remote && !sync.lastSync && (await firstSyncChoice()) === 'cloud') {
-      // start this device from the cloud copy
-      const { deleted, ...rest } = remote;
-      for (const k of Object.keys(state)) if (k !== 'sync') delete state[k];
-      Object.assign(state, rest, { notebooks: rest.notebooks.map(({ pageIds, ...nb }) => nb) });
-      state.sync = { prints: {}, deleted: deleted || {}, seen, up };
-      migrate(state); M.remember(state);
-      for (const nb of state.notebooks) seen[`nb-${nb.id}.json`] = files.get(`nb-${nb.id}.json`)?.modifiedTime;
-      seen['madar.json'] = coreF.modifiedTime;
-      changedHere = 1; remote = null;
-    }
+    if (remote && !sync.lastSync) { M.dropStarter(state, migrate(seed())); changedHere = 1; }
     // merge, then apply without disturbing objects that didn't change
     if (remote) {
       const merged = M.merge(state, remote);
@@ -241,6 +221,9 @@ async function syncNow(manual = false) {
         if (mine && mine !== nb) { Object.assign(mine, nb); merged.notebooks[merged.notebooks.indexOf(nb)] = mine; }
       }
       Object.assign(state, merged);
+      if (M.dedupeStarter(state, migrate(seed()))) changedHere++;
+      // the notebook on screen may have been one of the removed copies
+      if (ui.notebookId && !state.notebooks.some(n => n.id === ui.notebookId)) { ui.notebookId = null; inkApi = null; pendingRender = false; render(); changedHere = 0; }
     }
     // send ours up: the core file, each changed notebook, and any attachment the cloud doesn't have
     const cloudObj = M.forCloud(state);
@@ -248,6 +231,7 @@ async function syncNow(manual = false) {
     const corePrint = M.fp({ ...core, at: 0 });
     if (up.core !== corePrint || !coreF) { const f = await upload('madar.json', jsonBlob(core), coreF?.id); up.core = corePrint; seen['madar.json'] = f.modifiedTime; }
     for (const nb of state.notebooks) {
+      if (nb.localOnly) continue;
       const name = `nb-${nb.id}.json`, print = M.fp({ pages: nb.pages });
       if (up[name] === print && files.get(name)) continue;
       const f = await upload(name, jsonBlob({ id: nb.id, pages: nb.pages }), files.get(name)?.id);
@@ -259,8 +243,18 @@ async function syncNow(manual = false) {
       const b = await store.getBlob(key, true);
       if (b) await upload(name, b);
     }
+    // a notebook switched to this device only leaves the cloud
+    const synced = blobKeys(state);
+    for (const nb of state.notebooks) {
+      if (!nb.localOnly) continue;
+      const names = [`nb-${nb.id}.json`, ...[...blobKeys({ notebooks: [{ ...nb, localOnly: false }] })].filter(k => !synced.has(k)).map(blobName)];
+      for (const name of names) {
+        const f = files.get(name);
+        if (f) { await gfetch(`${DRIVE}/${f.id}`, { method: 'DELETE' }); files.delete(name); }
+      }
+    }
     M.remember(state);
-    cloud.lastSync = Date.now(); sync.lastSync = cloud.lastSync;
+    cloud.lastSync = Date.now(); state.sync.lastSync = cloud.lastSync;
     localSave();
     setStatus('ok');
     if (changedHere) { if (userIsEditing() || (inkApi && ui.view === 'ink')) pendingRender = true; else render(); }

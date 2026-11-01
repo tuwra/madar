@@ -89,15 +89,71 @@
     const deleted = mergeDeleted(st.sync?.deleted, remote.deleted);
     const out = { ...st };
     for (const c of COLLECTIONS) out[c] = mergeList(st[c], remote[c], deleted, c);
-    const nbs = mergeList(st.notebooks, remote.notebooks, deleted, 'nb');
-    out.notebooks = nbs.map(nb => mergeNotebook((st.notebooks || []).find(x => x.id === nb.id), (remote.notebooks || []).find(x => x.id === nb.id), deleted));
+    // a notebook kept on this device ignores whatever the cloud says about it
+    const solo = new Set((st.notebooks || []).filter(nb => nb.localOnly).map(nb => nb.id));
+    const remoteNbs = (remote.notebooks || []).filter(nb => !solo.has(nb.id));
+    const nbDeleted = { ...deleted };
+    for (const id of solo) delete nbDeleted[`nb:${id}`];
+    const nbs = mergeList(st.notebooks, remoteNbs, nbDeleted, 'nb');
+    out.notebooks = nbs.map(nb => mergeNotebook((st.notebooks || []).find(x => x.id === nb.id), remoteNbs.find(x => x.id === nb.id), deleted));
     out.sync = { ...(st.sync || {}), deleted };
     return out;
   }
   // what goes to the cloud: everything except per-device state
   function forCloud(st) {
     const { sync, ...rest } = st;
-    return { ...rest, deleted: sync?.deleted || {}, notebooks: (st.notebooks || []).map(nb => ({ ...nb, pageIds: nb.pages.map(p => p.id) })) };
+    return { ...rest, deleted: sync?.deleted || {}, notebooks: (st.notebooks || []).filter(nb => !nb.localOnly).map(nb => ({ ...nb, pageIds: nb.pages.map(p => p.id) })) };
   }
-  root.MadarMerge = { stamp, remember, merge, forCloud, mergeDeleted, fp };
+
+  /* ---------- starter content ----------
+   * Every device creates its own guides and examples with its own ids, so merging would pile up
+   * copies. An item counts as starter content only while it still matches a fresh copy, so
+   * anything the user changed is never touched. `fresh` is what seed() makes.
+   */
+  const SIGS = {
+    lists: l => (l.id === 'inbox' ? null : l.name),
+    tasks: t => (t.done ? null : t.title),
+    events: e => e.title,
+    pages: p => JSON.stringify([p.title, (p.blocks || []).map(b => [b.type, b.html ?? b.text ?? '', b.rows || 0])]),
+    notebooks: nb => JSON.stringify([nb.name, (nb.pages || []).filter(pg => pg.strokes?.length || pg.items?.length)
+      .map(pg => [pg.strokes?.length || 0, (pg.items || []).map(it => [it.type, it.text ?? it.html ?? ''])])]),
+  };
+  function starterItems(st, fresh, c) {
+    const known = new Set((fresh[c] || []).map(SIGS[c]).filter(Boolean));
+    return (st[c] || []).filter(it => { const s = SIGS[c](it); return s && known.has(s); });
+  }
+  // first sync of a device: the cloud already has the real data, so its untouched starter content goes
+  function dropStarter(st, fresh) {
+    const gone = c => new Set(starterItems(st, fresh, c));
+    for (const c of ['tasks', 'events', 'pages', 'notebooks']) { const g = gone(c); st[c] = (st[c] || []).filter(it => !g.has(it)); }
+    const used = new Set((st.tasks || []).map(t => t.listId)), lists = gone('lists');
+    st.lists = (st.lists || []).filter(l => !lists.has(l) || used.has(l.id));
+    const ids = new Set((st.pages || []).map(p => p.id));
+    for (const p of st.pages || []) if (p.parentId && !ids.has(p.parentId)) p.parentId = null;
+  }
+  // devices that already merged have several copies: keep one (the same one everywhere) and delete the rest
+  function dedupeStarter(st, fresh, now = Date.now()) {
+    const del = st.sync.deleted ||= {}, moved = new Map();
+    let removed = 0;
+    for (const c of ['lists', 'tasks', 'events', 'notebooks', 'pages']) {
+      const groups = new Map();
+      for (const it of starterItems(st, fresh, c)) { const s = SIGS[c](it); groups.set(s, [...(groups.get(s) || []), it]); }
+      // roots first, so a guide's sub-page stays with the guide that is kept (the guide links to it by id)
+      const ordered = [...groups.values()].sort((a, b) => (a[0].parentId ? 1 : 0) - (b[0].parentId ? 1 : 0));
+      for (const copies of ordered) {
+        if (copies.length < 2) continue;
+        // a sub-page whose guide survives stays: that guide links to it
+        const alive = it => it.parentId && !moved.has(it.parentId);
+        const rest = copies.filter(it => !alive(it)).sort((a, b) => (a.id < b.id ? -1 : 1));
+        const keep = copies.find(alive) || rest.shift();
+        for (const it of rest) { moved.set(it.id, keep.id); del[`${c === 'notebooks' ? 'nb' : c}:${it.id}`] = now; removed++; }
+        const dead = new Set(rest);
+        st[c] = st[c].filter(it => !dead.has(it));
+      }
+    }
+    for (const t of st.tasks || []) if (moved.has(t.listId)) t.listId = moved.get(t.listId);
+    for (const p of st.pages || []) if (moved.has(p.parentId)) p.parentId = moved.get(p.parentId);
+    return removed;
+  }
+  root.MadarMerge = { stamp, remember, merge, forCloud, mergeDeleted, fp, dropStarter, dedupeStarter };
 })(typeof window !== 'undefined' ? window : globalThis);

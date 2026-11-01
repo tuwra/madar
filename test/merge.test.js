@@ -56,4 +56,55 @@ ipad.pages = []; ipad = sync(ipad, 70); mac = sync(mac, 80);
 assert.strictEqual(mac.pages.length, 0, 'deleted page');
 // nothing changed: a sync reports zero local changes
 assert.strictEqual(stamp(mac, 90), 0, 'no false changes');
+
+// ---------- starter content: every device seeds its own copies
+const { dropStarter, dedupeStarter } = globalThis.MadarMerge;
+const guide = id => ({ id, title: 'guide', parentId: null, blocks: [{ id: id + 'b', type: 'p', html: 'how to' }, { id: id + 'l', type: 'page', pageId: id + 'c' }] });
+const sub = id => ({ id: id + 'c', title: 'sub', parentId: id, blocks: [{ id: id + 'x', type: 'p', html: 'child' }] });
+const starter = id => ({
+  lists: [{ id: 'inbox', name: 'in' }, { id: id + 'L', name: 'personal' }],
+  tasks: [{ id: id + 'T', title: 'try me', listId: 'inbox' }], events: [{ id: id + 'E', title: 'example' }], habits: [],
+  pages: [guide(id), sub(id)],
+  notebooks: [{ id: id + 'N', name: 'first', pages: [{ id: id + 'P', strokes: [], items: [] }] }],
+});
+const fresh = starter('fresh');
+// an existing account already holding three copies, one of them edited
+const dup = { ...starter('b'), sync: { deleted: {}, prints: {} } };
+for (const k of ['lists', 'tasks', 'events', 'pages', 'notebooks']) dup[k] = [...dup[k], ...starter('a')[k].filter(i => i.id !== 'inbox'), ...starter('c')[k].filter(i => i.id !== 'inbox')];
+dup.pages.find(p => p.id === 'c').blocks[0].html = 'my own edit';
+dup.tasks.push({ id: 'mine', title: 'real task', listId: 'cL' });
+dedupeStarter(dup, fresh, 1000);
+assert.deepStrictEqual(dup.pages.filter(p => p.title === 'guide').map(p => p.id).sort(), ['a', 'c'], 'one pristine guide, edited one kept');
+assert.strictEqual(dup.pages.find(p => p.title === 'sub' && p.parentId === 'a').id, 'ac', 'kept guide keeps its own sub-page');
+assert.strictEqual(dup.pages.find(p => p.id === 'cc').parentId, 'c', 'sub-page of the edited guide stays');
+assert.strictEqual(dup.lists.filter(l => l.name === 'personal').length, 1, 'one list');
+assert.strictEqual(dup.tasks.find(t => t.id === 'mine').listId, 'aL', 'real task follows its list');
+assert.strictEqual(dup.tasks.filter(t => t.title === 'try me').length, 1, 'one example task');
+assert.strictEqual(dup.notebooks.length, 1, 'one empty notebook');
+assert.strictEqual(dup.sync.deleted['pages:b'], 1000, 'copies are tombstoned for other devices');
+// a new device loses only its untouched starter content
+const dev = { ...starter('n'), sync: { deleted: {}, prints: {} } };
+dev.notebooks.push({ id: 'drawn', name: 'first', pages: [{ id: 'q', strokes: [{}], items: [] }] });
+dev.tasks.push({ id: 'keep', title: 'written here', listId: 'nL' });
+dropStarter(dev, fresh);
+assert.deepStrictEqual(dev.pages, [], 'guide gone');
+assert.deepStrictEqual(dev.notebooks.map(n => n.id), ['drawn'], 'drawn notebook kept');
+assert.deepStrictEqual(dev.tasks.map(t => t.id), ['keep'], 'own task kept');
+assert.ok(dev.lists.some(l => l.id === 'nL'), 'list in use kept');
+
+// ---------- a notebook kept on one device
+cloud = null;
+let a = clone(base), b = clone(base);
+a = sync(a, 100); b = sync(b, 110); a = sync(a, 120);
+a.notebooks[0].localOnly = true; a.sync.deleted['nb:n1'] = 130;
+a = sync(a, 140);
+assert.strictEqual(a.notebooks.length, 1, 'stays on its device');
+assert.strictEqual(cloud.notebooks.length, 0, 'not in the cloud');
+b = sync(b, 150);
+assert.strictEqual(b.notebooks.length, 0, 'leaves the other device');
+a = sync(a, 160);
+assert.strictEqual(a.notebooks.length, 1, 'still here after syncing again');
+delete a.notebooks[0].localOnly;
+a = sync(a, 170); b = sync(b, 180);
+assert.strictEqual(b.notebooks.length, 1, 'turning sync back on brings it back');
 console.log('merge tests passed');

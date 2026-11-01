@@ -381,7 +381,7 @@ function renderInk() {
         const p0 = n.pages[0] || {}, land = pageW(p0) > pageH(p0);
         return `<div class="nb ${land ? 'land' : ''}" style="--c:${n.color}">
         <button class="nb-cover ${n.cover ? 'has-img' : ''}" data-act="open-nb" data-nb="${n.id}" style="aspect-ratio:${pageW(p0)} / ${pageH(p0)}">${n.cover ? `<img src="${n.cover}" alt="">` : `<span>${esc(n.name)}</span>`}${n.fav ? `<i class="fav">${ic('markOn')}</i>` : ''}</button>
-        <div class="nb-info"><div><b>${esc(n.name)}</b><div class="nb-meta">${n.kind === 'book' ? 'كتاب' : n.planner ? 'مخطط' : 'دفتر'} · ${n.pages.length} صفحة</div></div><button class="tb small" data-act="nb-opts" data-nb="${n.id}" aria-label="خيارات">${ic('more')}</button></div>
+        <div class="nb-info"><div><b>${esc(n.name)}</b><div class="nb-meta">${n.kind === 'book' ? 'كتاب' : n.planner ? 'مخطط' : 'دفتر'} · ${n.pages.length} صفحة${n.localOnly ? ' · على هذا الجهاز بس' : ''}</div></div><button class="tb small" data-act="nb-opts" data-nb="${n.id}" aria-label="خيارات">${ic('more')}</button></div>
       </div>`;
       }).join('') || '<div class="empty" style="grid-column:1/-1">ما فيه شي هنا بعد</div>'}
     </div></div>`;
@@ -419,11 +419,13 @@ function notebookDialog(nb) {
       ${sizePicker()}
       ${templatePicker('lined', 'white')}
       <span class="note">لون الغلاف</span>${swatches('color', COLORS[3])}
+      <label class="check-row"><input type="checkbox" name="sync" checked> زامنه مع أجهزتي</label>
       ${actions(false)}`, fd => {
       const size = fd.get('size'), land = fd.get('orient') === 'l', preset = fd.get('preset'), paper = fd.get('paper') || 'lined';
       const dims = pageDims(size, land);
       const pages = preset === 'plain' ? [{ id: uid(), strokes: [], items: [], ...dims, paper, tpl: tplInit(paper) }] : plannerPages(preset, size, land);
       const x = { id: uid(), kind: 'notebook', planner: preset !== 'plain', name: fd.get('name').trim(), color: fd.get('color') || COLORS[3], paper, paperColor: fd.get('paperColor') || 'white', size, created: Date.now(), pages };
+      if (fd.get('sync') !== 'on') x.localOnly = true;
       state.notebooks.push(x); ui.notebookId = x.id; ui.inkPage = 0;
       save(); render();
     });
@@ -433,6 +435,8 @@ function notebookDialog(nb) {
     <input name="name" class="title-input" value="${esc(nb.name)}" required>
     <span class="note">لون الغلاف</span>${swatches('color', nb.color)}
     <label class="check-row"><input type="checkbox" name="fav" ${nb.fav ? 'checked' : ''}> في المفضلة</label>
+    <label class="check-row"><input type="checkbox" name="sync" ${nb.localOnly ? '' : 'checked'}> زامنه مع أجهزتي</label>
+    <p class="note">إذا شلت المزامنة، ${nb.kind === 'book' ? 'الكتاب' : 'الدفتر'} يبقى على هذا الجهاز بس وينحذف من أجهزتك الثانية.</p>
     <div class="row wrap"><button class="btn" value="dup" formnovalidate>تكرار</button><button class="btn" value="pdf" formnovalidate>تصدير PDF</button></div>
     ${actions(true)}`, (fd, v) => {
     if (v === 'delete') return void setTimeout(() => ask(`تحذف «${esc(nb.name)}» بكل صفحاته؟`, 'حذف', () => {
@@ -441,11 +445,19 @@ function notebookDialog(nb) {
     if (v === 'dup') { state.notebooks.push({ ...structuredClone(nb), id: uid(), name: nb.name + ' (نسخة)', fav: false }); save(); render(); return; }
     if (v === 'pdf') return void exportPdf(nb);
     Object.assign(nb, { name: fd.get('name').trim(), color: fd.get('color') || nb.color, fav: fd.get('fav') === 'on' });
+    const solo = fd.get('sync') !== 'on';
+    if (solo && !nb.localOnly) { nb.localOnly = true; if (state.sync) (state.sync.deleted ||= {})[`nb:${nb.id}`] = Date.now(); }
+    if (!solo) delete nb.localOnly;
     save(); render();
   });
 }
 
-async function importBook(files) {
+function importBook(files) {
+  openDialog(`<h3>تزامن ${files.length > 1 ? 'الكتب' : 'الكتاب'} مع أجهزتك؟</h3>
+    <button class="btn primary" value="sync">إيه، زامن</button>
+    <button class="btn" value="local">لا، خله على هذا الجهاز بس</button>`, (fd, v) => { importFiles(files, v === 'local'); });
+}
+async function importFiles(files, solo) {
   for (const f of files) {
     // files from the Mac file picker carry their bytes; browser File objects are read here
     const bytes = f instanceof Blob ? new Uint8Array(await f.arrayBuffer()) : new Uint8Array(f.bytes);
@@ -461,6 +473,7 @@ async function importBook(files) {
         if (n % 25 === 0) toast(`جاري استيراد «${f.name}»… ${n}/${doc.numPages}`, 60000);
       }
       const nb = { id: uid(), kind: 'book', name: f.name.replace(/\.pdf$/i, ''), color: '#475569', pdf: key, paper: 'blank', paperColor: 'white', created: Date.now(), pages };
+      if (solo) nb.localOnly = true;
       const cv = document.createElement('canvas'); cv.width = 360; cv.height = Math.round(360 * pageH(pages[0]) / pageW(pages[0]));
       await paintPage(cv.getContext('2d'), nb, pages[0], 360 / pageW(pages[0]));
       nb.cover = cv.toDataURL('image/jpeg', 0.85);
