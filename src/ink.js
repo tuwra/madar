@@ -3,14 +3,15 @@
 
 const PEN_STYLES = { fountain: 'قلم حبر', ball: 'قلم جاف', brush: 'فرشاة' };
 const SHAPES = { line: 'خط', arrow: 'سهم', rect: 'مستطيل', ellipse: 'دائرة', triangle: 'مثلث' };
-const TOOLS = [['hand', 'يد: للقراءة والتنقل بدون كتابة', 'R'], ['pen', 'قلم', 'P'], ['hl', 'قلم تظليل', 'H'], ['eraser', 'ممحاة', 'E'], ['lasso', 'تحديد', 'L'], ['shape', 'أشكال', 'S'], ['text', 'نص', 'T'], ['image', 'صورة', 'I'], ['laser', 'مؤشر ليزر', 'K']];
+const TOOLS = [['lasso', 'تحديد', 'L'], ['pen', 'قلم', 'P'], ['hl', 'قلم تظليل', 'H'], ['eraser', 'ممحاة', 'E'], ['text', 'نص', 'T'], ['shape', 'أشكال', 'S'], ['image', 'صورة', 'I'], ['laser', 'مؤشر ليزر', 'K'], ['hand', 'يد: للقراءة والتنقل بدون كتابة', 'R']];
 
+const PEN_FRESH = { fountain: { thin: 0.25, sharp: 0, stab: 0.05 }, ball: { thin: 0.12, sharp: 0, stab: 0.05 }, brush: { thin: 0.85, sharp: 0.75, stab: 0.2 } };
 const ink = {
   tool: 'pen', penStyle: 'fountain',
-  colors: { pen: ['#111111', '#1d4ed8', '#dc2626'], hl: ['#ffe03d', '#78e08a', '#7cb6ff'] },
+  colors: { pen: ['#111111', '#f03a3a', '#b3437f', '#1e6fc2', '#f68a1f', '#ff4fc8'], hl: ['#ffe03d', '#78e08a', '#7cb6ff'] },
   colorIdx: { pen: 0, hl: 0 },
-  sizes: { pen: [1.5, 3, 5.5], hl: [3, 4.5, 7], eraser: [8, 18, 36] }, sizeIdx: { pen: 1, hl: 1, eraser: 1 },
-  penOpts: { fountain: { thin: 0.45, sharp: 0.2, stab: 0.05 }, ball: { thin: 0.12, sharp: 0, stab: 0.05 }, brush: { thin: 0.85, sharp: 0.75, stab: 0.2 } },
+  sizes: { pen: [1.24, 2.07, 3.3], hl: [3, 4.5, 7], eraser: [8, 18, 36] }, sizeIdx: { pen: 1, hl: 1, eraser: 1 },
+  penOpts: structuredClone(PEN_FRESH),
   hlOpts: { alpha: 0.5, tip: 'chisel', straight: false },
   eraser: 'stroke', eraseHlOnly: false, shape: 'rect', textSize: 28, laserMode: 'trail', recentColors: [],
   zoom: 1, finger: 'auto', thumbs: false, marksOnly: false,
@@ -25,6 +26,10 @@ function applyInkPrefs(saved) {
   const f = ink.penOpts?.fountain; if (f && f.thin === 0.6 && f.sharp === 0.3) Object.assign(f, { thin: 0.45, sharp: 0.2 });
   // the old default smoothing rounded off corners; a value the user chose stays
   for (const [k, was, now] of [['fountain', 0.5, 0.05], ['ball', 0.5, 0.05], ['brush', 0.55, 0.2]]) if (ink.penOpts?.[k]?.stab === was) ink.penOpts[k].stab = now;
+  if (f && f.thin === 0.45 && f.sharp === 0.2) Object.assign(f, { thin: 0.25, sharp: 0 });
+  if (String(ink.sizes?.pen) === '1.5,3,5.5') ink.sizes.pen = [1.24, 2.07, 3.3];
+  // the colour row grew from three to six; the user's own three stay first
+  if (ink.colors?.pen?.length === 3) ink.colors.pen.push('#1e6fc2', '#f68a1f', '#ff4fc8');
 }
 try { applyInkPrefs(JSON.parse(localStorage.getItem('madar-ink2') || 'null')); } catch { /* ignore */ }
 // called by boot once the saved data is loaded: those settings win over browser storage
@@ -526,6 +531,7 @@ function renderNotebook(nb) {
   if (ui.inkPage >= nb.pages.length) ui.inkPage = nb.pages.length - 1;
   view.innerHTML = `<div class="ink"><div class="ink-bar"></div>
     <div class="ink-body"><div class="ink-stage"><div class="pages-col"></div></div><aside class="thumbs" hidden></aside></div>
+    <div class="ink-undo"></div><div class="ink-tray" hidden></div>
     <div class="ink-float"><button class="tb small" data-act="ink-zoom" data-z="-1" title="تصغير">${ic('zoomOut')}</button><button class="zoom-n" data-act="ink-zoom" data-z="0" title="رجوع للحجم الأصلي"></button><button class="tb small" data-act="ink-zoom" data-z="1" title="تكبير">${ic('zoomIn')}</button><span class="tb-sep"></span><span class="pg-n"></span></div>
     <div class="ink-pop" hidden></div></div>`;
   const root = $('.ink'), stage = $('.ink-stage'), col = $('.pages-col'), pop = $('.ink-pop');
@@ -791,37 +797,37 @@ function renderNotebook(nb) {
   /* toolbar */
   function bar() {
     const t = ink.tool, k = toolKind(t);
+    // the floating tray under the bar: this tool's kinds, then its sizes, then its colours
     let opts = '';
-    if (['pen', 'hl', 'shape', 'text'].includes(t)) {
-      opts += ink.colors[k].map((c, i) => `<button class="cslot ${i === ink.colorIdx[k] ? 'on' : ''}" style="--c:${c}" data-act="ink-cslot" data-i="${i}" title="${i === ink.colorIdx[k] ? 'اضغط مرة ثانية عشان تغيّر اللون' : 'لون'}"></button>`).join('');
-    }
+    if (t === 'pen') opts += Object.keys(PEN_STYLES).map(st => (st === ink.penStyle
+      ? `<button class="tray-pen on" data-act="ink-tool" data-tool="pen" title="إعدادات ${PEN_STYLES[st]}">${ic(st === 'fountain' ? 'pen' : st)}<svg class="tray-chev" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4"/></svg></button>`
+      : `<button class="tray-pen" data-act="tray-pen" data-s="${st}" title="${PEN_STYLES[st]}">${ic(st === 'fountain' ? 'pen' : st)}</button>`)).join('') + '<span class="tb-sep"></span>';
     const sk = t === 'shape' ? 'pen' : t;
     if (['pen', 'hl', 'shape'].includes(t) || (t === 'eraser' && ink.eraser === 'part')) {
-      opts += (opts ? '<span class="tb-sep"></span>' : '') + ink.sizes[sk].map((s, i) => { const d = dotPx(sk, s); return `<button class="sslot ${i === ink.sizeIdx[sk] ? 'on' : ''}" data-act="ink-sslot" data-i="${i}" title="${i === ink.sizeIdx[sk] ? 'اضغط مرة ثانية عشان تعدّل هذا الحجم' : 'السماكة'}"><span style="width:${d}px;height:${d}px"></span></button>`; }).join('');
+      opts += ink.sizes[sk].map((s, i) => `<button class="sslot ${i === ink.sizeIdx[sk] ? 'on' : ''}" data-act="ink-sslot" data-i="${i}" title="${i === ink.sizeIdx[sk] ? 'اضغط مرة ثانية عشان تعدّل هذا الحجم' : 'السماكة'}"><span style="height:${Math.min(8, Math.max(2, Math.round(dotPx(sk, s) / 2)))}px"></span></button>`).join('');
+    }
+    if (['pen', 'hl', 'shape', 'text'].includes(t)) {
+      opts += (['pen', 'hl', 'shape'].includes(t) ? '<span class="tb-sep"></span>' : '') + ink.colors[k].map((c, i) => `<button class="cslot ${i === ink.colorIdx[k] ? 'on' : ''}" style="--c:${c}" data-act="ink-cslot" data-i="${i}" title="${i === ink.colorIdx[k] ? 'اضغط مرة ثانية عشان تغيّر اللون' : 'لون'}"></button>`).join('');
     }
     const pg = curPg();
     $('.ink-bar').innerHTML = `
-      <div class="tb-side"><button class="tb" data-act="ink-back" title="الرف">${ic('back')}</button><span class="nb-title">${esc(nb.name)}</span></div>
+      <div class="tb-side"><button class="tb tb-back" data-act="ink-back" title="الرف">${ic('back')}</button><button class="tb ${ink.thumbs ? 'on' : ''}" data-act="ink-thumbs" title="الصفحات">${ic('pages')}</button><button class="tb ${pg?.mark ? 'on' : ''}" data-act="ink-mark" title="علامة مرجعية">${ic(pg?.mark ? 'markOn' : 'mark')}</button><span class="nb-title">${esc(nb.name)}</span></div>
       <div class="tb-tools">
         ${TOOLS.map(([key, n, sc]) => `<button class="tb ${t === key ? 'on' : ''}" data-act="ink-tool" data-tool="${key}" title="${n} (${sc})">${ic(key === 'shape' ? (ink.shape || 'shape') : key === 'pen' ? (ink.penStyle === 'fountain' ? 'pen' : ink.penStyle) : key)}</button>`).join('')}
-        ${opts ? `<span class="tb-sep"></span>${opts}` : ''}
       </div>
       <div class="tb-side end">
-        <button class="tb" data-act="ink-undo" ${ink.undo.length ? '' : 'disabled'} title="تراجع (⌘Z)">${ic('undo')}</button>
-        <button class="tb" data-act="ink-redo" ${ink.redo.length ? '' : 'disabled'} title="إعادة (⇧⌘Z)">${ic('redo')}</button>
-        <span class="tb-sep"></span>
-        <button class="tb ${pg?.mark ? 'on' : ''}" data-act="ink-mark" title="علامة مرجعية">${ic(pg?.mark ? 'markOn' : 'mark')}</button>
-        <button class="tb ${ink.thumbs ? 'on' : ''}" data-act="ink-thumbs" title="الصفحات">${ic('pages')}</button>
         <button class="tb" data-act="ink-add-page" title="صفحة جديدة بعد هذي">${ic('addPage')}</button>
         <button class="tb" data-act="ink-more" title="المزيد">${ic('more')}</button>
       </div>`;
+    $('.ink-undo').innerHTML = `<button class="tb" data-act="ink-undo" ${ink.undo.length ? '' : 'disabled'} title="تراجع (⌘Z)">${ic('undo')}</button><button class="tb" data-act="ink-redo" ${ink.redo.length ? '' : 'disabled'} title="إعادة (⇧⌘Z)">${ic('redo')}</button>`;
+    const tray = $('.ink-tray'); tray.innerHTML = opts; tray.hidden = !opts;
     root.className = `ink tool-${t} ${fingerPans() ? 'finger-pan' : ''}`;
     for (const v of V.values()) $$('.ti', v.items).forEach(el => { el.contentEditable = t === 'text'; });
   }
   const slider = (key, label, val, min, max, step, shown) => `<label class="pp-row"><span>${label}</span><input type="range" data-pp="${key}" min="${min}" max="${max}" step="${step}" value="${val}"><output>${shown}</output></label>`;
   // sizes are shown in millimetres of the page, like GoodNotes (a page is 1000 units = 210 mm wide)
   const MM = { pen: 0.21 * 1.15, hl: 0.21 * 5.2 };
-  const SIZE_PRESETS = { pen: [0.18, 0.35, 0.5, 1, 2], hl: [2, 3.5, 5, 7, 10] };
+  const SIZE_PRESETS = { pen: [0.18, 0.5, 0.6, 1.9, 3.8], hl: [2, 3.5, 5, 7, 10] };
   const MM_RANGE = { pen: [0.1, 5], hl: [1, 12] };
   const fmtMm = mm => (mm < 1 ? mm.toFixed(2) : mm.toFixed(1)) + 'mm';
   // the slider moves on a log scale, so the thin sizes get as much room as the thick ones
@@ -1034,7 +1040,7 @@ function renderNotebook(nb) {
   }
   let spaceHand = false;
   let act = null, cur = null, mode = null, gesture = null, lasso = null, start = null, erasing = null, holdTimer = null, holdAnchor = null, selDrag = null;
-  const laser = { strokes: [], cur: null, raf: 0, v: null, dot: null };
+  const laser = { strokes: [], cur: null, raf: 0, v: null, dot: null, up: 0 };
 
   function abortStroke() { if (act) clearLive(act); cur = null; mode = null; lasso = null; clearTimeout(holdTimer); }
   function down(e) {
@@ -1082,7 +1088,7 @@ function renderNotebook(nb) {
     else if (t === 'shape') { start = p; cur = { tool: 'pen', style: 'ball', color: curColor(), size: curSize(), shape: ink.shape, pts: [p] }; }
     else if (t === 'text') { addText(v, p); mode = null; }
     else if (t === 'laser') {
-      laser.v = v;
+      laser.v = v; laser.up = 0;
       if (ink.laserMode === 'dot') laser.dot = { p, end: 0 };
       else { laser.cur = { pts: [p], end: 0 }; laser.strokes.push(laser.cur); }
       runLaser();
@@ -1214,38 +1220,36 @@ function renderNotebook(nb) {
     if (changed) { pg.strokes = out; erasing.changed = true; drawInk(v); }
     clearLive(v); eraserCursor(v, p);
   }
-  const LASER = { hold: 550, fade: 450 };
+  // timings measured from a recording of GoodNotes: the whole trail goes together, in a third of a second,
+  // and touching the page again just after brings it back
+  const LASER = { hold: 1000, fade: 330, revive: 120 };
   function laserUp() {
     const now = performance.now();
-    if (laser.cur) { laser.cur.end = now; laser.cur = null; }
-    if (laser.dot) laser.dot.end = now;
+    laser.cur = null; laser.up = now;
   }
   function runLaser() {
     if (laser.raf) return;
     const tick = () => {
       const now = performance.now(), v = laser.v;
       if (!v || !V.has(v.pg)) { laser.strokes = []; laser.dot = null; laser.raf = 0; return; }
-      const alphaOf = end => !end ? 1 : Math.max(0, 1 - (now - end - LASER.hold) / LASER.fade);
-      laser.strokes = laser.strokes.filter(st => alphaOf(st.end) > 0);
-      if (laser.dot && laser.dot.end && now - laser.dot.end > 250) laser.dot = null;
+      const t = laser.up ? (now - laser.up - LASER.hold) / LASER.fade : -1;
+      if (t * LASER.fade > LASER.fade + LASER.revive) { laser.strokes = []; laser.dot = null; }
+      const a = t <= 0 ? 1 : t >= 1 ? 0 : 0.5 + 0.5 * Math.cos(Math.PI * t);
       clearLive(v);
       const c = v.ctx.live, s = Math.max(0.5, scale);
-      c.save(); c.lineCap = 'round'; c.lineJoin = 'round';
-      for (const st of laser.strokes) {
-        const a = alphaOf(st.end), P = st.pts;
-        const path = new Path2D(); path.moveTo(P[0][0], P[0][1]);
+      const path = new Path2D();
+      for (const { pts: P } of laser.strokes) {
+        path.moveTo(P[0][0], P[0][1]);
         for (let i = 1; i < P.length - 1; i++) path.quadraticCurveTo(P[i][0], P[i][1], (P[i][0] + P[i + 1][0]) / 2, (P[i][1] + P[i + 1][1]) / 2);
         if (P.length > 1) path.lineTo(P[P.length - 1][0], P[P.length - 1][1]); else path.lineTo(P[0][0] + 0.01, P[0][1]);
-        c.globalAlpha = a * 0.25; c.strokeStyle = '#ff3b30'; c.lineWidth = 13 / s; c.stroke(path);
-        c.globalAlpha = a; c.lineWidth = 4.5 / s; c.stroke(path);
-        c.globalAlpha = a * 0.95; c.strokeStyle = '#fff5f6'; c.lineWidth = 1.5 / s; c.stroke(path);
       }
-      if (laser.dot) {
-        const [x, y] = laser.dot.p, a = laser.dot.end ? Math.max(0, 1 - (now - laser.dot.end) / 250) : 1, r = 14 / s;
-        const g = c.createRadialGradient(x, y, 0, x, y, r);
-        g.addColorStop(0, `rgba(255,255,255,${a})`); g.addColorStop(0.25, `rgba(255,59,48,${a})`); g.addColorStop(1, 'rgba(255,59,48,0)');
-        c.globalAlpha = 1; c.fillStyle = g; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill();
-      }
+      if (laser.dot) { path.moveTo(laser.dot.p[0], laser.dot.p[1]); path.lineTo(laser.dot.p[0] + 0.01, laser.dot.p[1]); }
+      c.save(); c.lineCap = 'round'; c.lineJoin = 'round';
+      // a neon tube: white core, solid red edge, and a soft red glow that dies out around it
+      c.strokeStyle = '#fa0000';
+      for (const [w, o] of [[34, .05], [28, .07], [22, .1], [17, .14], [13, .2]]) { c.globalAlpha = a * o; c.lineWidth = w / s; c.stroke(path); }
+      c.globalAlpha = a; c.lineWidth = 8.5 / s; c.stroke(path);
+      c.strokeStyle = '#fffdfe'; c.lineWidth = 2.8 / s; c.stroke(path);
       c.restore();
       const busy = laser.strokes.length || laser.dot || mode === 'laser';
       laser.raf = busy ? requestAnimationFrame(tick) : 0;
@@ -1416,21 +1420,22 @@ Object.assign(A, {
   'ink-cslot': a => {
     const k = toolKind(ink.tool), i = +a.dataset.i;
     if (ink.colorIdx[k] !== i) { ink.colorIdx[k] = i; keepInkPrefs(); inkApi.bar(); return; }
-    inkApi.openColorPop($(`.ink-bar [data-act="ink-cslot"][data-i="${i}"]`) || a, k, i);
+    inkApi.openColorPop($(`.ink-tray [data-act="ink-cslot"][data-i="${i}"]`) || a, k, i);
   },
   'cp-pick': a => {
     const [k, i] = ($('.ink-pop').dataset.slot || '').split(':');
     inkApi.setSlotColor(k, +i, a.dataset.c);
-    inkApi.openColorPop($(`.ink-bar [data-act="ink-cslot"][data-i="${i}"]`), k, +i);
+    inkApi.openColorPop($(`.ink-tray [data-act="ink-cslot"][data-i="${i}"]`), k, +i);
   },
   'ink-sslot': a => {
     const k = ink.tool === 'shape' ? 'pen' : ink.tool, i = +a.dataset.i;
     if (ink.sizeIdx[k] !== i) { ink.sizeIdx[k] = i; keepInkPrefs(); inkApi.bar(); return; }
-    inkApi.openSizePop($(`.ink-bar [data-act="ink-sslot"][data-i="${i}"]`) || a, k, i);
+    inkApi.openSizePop($(`.ink-tray [data-act="ink-sslot"][data-i="${i}"]`) || a, k, i);
   },
   'laser-mode': a => { ink.laserMode = a.dataset.m; keepInkPrefs(); inkApi.closePop(); inkApi.bar(); },
+  'tray-pen': a => { ink.penStyle = a.dataset.s; keepInkPrefs(); inkApi.bar(); },
   'pen-style': a => { ink.penStyle = a.dataset.s; keepInkPrefs(); inkApi.bar(); inkApi.openPop(null); },
-  'pen-reset': () => { ink.penOpts[ink.penStyle] = { ...PEN_DEFAULTS[ink.penStyle] }; ink.sizes.pen[ink.sizeIdx.pen] = [1.5, 3, 5.5][ink.sizeIdx.pen]; keepInkPrefs(); inkApi.bar(); inkApi.openPop(null); },
+  'pen-reset': () => { ink.penOpts[ink.penStyle] = { ...PEN_FRESH[ink.penStyle] }; ink.sizes.pen[ink.sizeIdx.pen] = [1.24, 2.07, 3.3][ink.sizeIdx.pen]; keepInkPrefs(); inkApi.bar(); inkApi.openPop(null); },
   'pt-tab': a => { $('.ink-pop').dataset.tab = a.dataset.t; inkApi.openPop(null); },
   'pt-preset': a => {
     const k = ink.tool === 'hl' ? 'hl' : 'pen';
