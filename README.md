@@ -4,6 +4,8 @@
 
 تطبيق مفتوح المصدر للماك والويندوز يجمع **المهام، والتقويم، والملاحظات، والدفاتر بخط اليد** في مكان واحد. بسيط، بالعربي، ويشتغل بدون إنترنت، وبدون أي ذكاء اصطناعي.
 
+**جرّبه من المتصفح بدون تثبيت: [tuwra.github.io/madar](https://tuwra.github.io/madar/)**
+
 ## المزايا
 
 أول ما تفتح مدار تلقى **«دليل الملاحظات»**: صفحة فيها كل الأوامر والاختصارات مع أمثلة. وتلقى كمان **«دليل الدفاتر»**: دفتر نموذجي من 5 صفحات، فيه الأدوات، والاختصارات، وملخص درس مرسوم، وصفحة مراجعة.
@@ -58,6 +60,9 @@
 
 ## التثبيت
 
+### الموقع (آيباد، آيفون، أو أي جهاز)
+افتح [tuwra.github.io/madar](https://tuwra.github.io/madar/). وعلى الآيباد والآيفون تقدر من Safari تضغط زر المشاركة ← **Add to Home Screen** وتطلع لك أيقونة مثل التطبيق. سجّل دخولك بقوقل من **الحفظ والمزامنة** عشان يتزامن مع أجهزتك.
+
 ### ماك
 1. نزّل ملف `.dmg` من صفحة [Releases](https://github.com/tuwra/madar/releases). النسخة لأجهزة Apple Silicon (M1 وأحدث)
 2. افتحه واسحب **Madar** لمجلد التطبيقات
@@ -105,4 +110,4 @@ npm run dist:win   # يبني مثبّت ويندوز
 
 ---
 
-**Madar** is an open-source app for macOS and Windows that combines tasks, a calendar, Notion-style notes and GoodNotes-style handwritten notebooks (with PDF annotation) in one simple Arabic-first app. No AI, works offline, and your data is plain files you can keep in Google Drive. Made by Raeed Alotaibi (رائد العتيبي). MIT licensed.
+**Madar** is an open-source app for macOS and Windows that combines tasks, a calendar, Notion-style notes and GoodNotes-style handwritten notebooks (with PDF annotation) in one simple Arabic-first app. No AI, works offline, and your data is plain files you can keep in Google Drive. Try it in your browser at [tuwra.github.io/madar](https://tuwra.github.io/madar/). Made by Raeed Alotaibi (رائد العتيبي). MIT licensed.
