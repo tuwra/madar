@@ -14,10 +14,10 @@ const ink = {
   penOpts: structuredClone(PEN_FRESH),
   hlOpts: { alpha: 0.5, tip: 'chisel', straight: false },
   eraser: 'stroke', eraseHlOnly: false, shape: 'rect', textSize: 28, laserMode: 'trail', recentColors: [],
-  zoom: 1, finger: 'auto', thumbs: false, marksOnly: false,
+  scribble: true, zoom: 1, finger: 'auto', thumbs: false, marksOnly: false,
   undo: [], redo: [], penSeen: false, sel: null,
 };
-const INK_PREF_KEYS = ['tool', 'penStyle', 'penOpts', 'hlOpts', 'colors', 'colorIdx', 'sizes', 'sizeIdx', 'eraser', 'eraseHlOnly', 'shape', 'textSize', 'finger', 'thumbs', 'laserMode', 'recentColors'];
+const INK_PREF_KEYS = ['scribble', 'tool', 'penStyle', 'penOpts', 'hlOpts', 'colors', 'colorIdx', 'sizes', 'sizeIdx', 'eraser', 'eraseHlOnly', 'shape', 'textSize', 'finger', 'thumbs', 'laserMode', 'recentColors'];
 function applyInkPrefs(saved) {
   if (!saved) return;
   for (const k of INK_PREF_KEYS) if (saved[k] !== undefined) ink[k] = structuredClone(saved[k]);
@@ -55,27 +55,27 @@ const TRAY_PEN = {
 /* line icons, drawn in the style of the rest of the app */
 const ICON = {
   back: '<path d="M9 5l7 7-7 7"/>',
-  pen: '<path d="M4.5 19.5l1-4.2L16 4.8a2 2 0 0 1 2.9 0l.3.3a2 2 0 0 1 0 2.9L8.7 18.5z"/><path d="M14.5 6.5l3 3"/>',
-  hl: '<path d="M8.5 13.5l7-7 4 4-7 7H8.5z"/><path d="M8.5 13.5L5 17v2h4l3.5-1.5"/><path d="M4 21h16" opacity=".5"/>',
-  eraser: '<path d="M7.5 19.5h12"/><path d="M4.9 14.9l8.6-8.6a2 2 0 0 1 2.8 0l2.4 2.4a2 2 0 0 1 0 2.8l-7.7 7.7a2 2 0 0 1-1.4.6H9.4a2 2 0 0 1-1.4-.6l-3.1-3.1a.9.9 0 0 1 0-1.2z"/><path d="M9 10.8l4.6 4.6"/>',
-  lasso: '<ellipse cx="12" cy="9.5" rx="8" ry="5.5" stroke-dasharray="3 2.6"/><path d="M7.5 13.8c-1.2 1.6-.4 3.4 1.6 3.4 1.6 0 2.2 1.6.9 3.3"/>',
-  shape: '<rect x="3.5" y="10.5" width="9" height="9" rx="1.5"/><circle cx="16" cy="8" r="4.5"/>',
-  text: '<path d="M5 7V5h14v2"/><path d="M12 5v14"/><path d="M9 19h6"/>',
-  image: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="9.5" r="1.7"/><path d="M20.5 15.5l-4.5-4.5-9 8.5"/>',
-  laser: '<circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="6.5" opacity=".45"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2" opacity=".45"/>',
+  pen: '<path d="M16.6 3.6a2.2 2.2 0 0 1 3.1 0l.7.7a2.2 2.2 0 0 1 0 3.1L9.2 18.6l-5 1.2 1.2-5z" fill="currentColor" fill-opacity=".16"/><path d="M14.5 5.7l3.8 3.8"/><path d="M5.4 14.8l3.8 3.8"/>',
+  hl: '<path d="M14.8 3.8l5.4 5.4-8.7 8.7H8.3l-2.2-2.2v-3.2z" fill="currentColor" fill-opacity=".16"/><path d="M6.1 15.7l-2.6 4.8h5.2l1-2.6"/><path d="M13.5 20.5h7"/>',
+  eraser: '<path d="M14 4.1l5.9 5.9a1.8 1.8 0 0 1 0 2.5l-7.2 7.2H8.1l-4-4a1.8 1.8 0 0 1 0-2.5l7.4-9.1a1.8 1.8 0 0 1 2.5 0z" fill="currentColor" fill-opacity=".16"/><path d="M8 8.5l7.6 7.6"/><path d="M12.7 19.7h7.8"/>',
+  lasso: '<path d="M4 9.5C4 6 7.6 3.5 12 3.5s8 2.5 8 6-3.6 6-8 6c-1 0-1.9-.1-2.8-.4" stroke-dasharray="2.8 2.6"/><circle cx="6.9" cy="14.6" r="2" fill="currentColor" fill-opacity=".16"/><path d="M6.7 16.6c-.5 2 .3 3.9 2.6 3.9"/>',
+  shape: '<rect x="10" y="10" width="10.5" height="10.5" rx="2" fill="currentColor" fill-opacity=".16"/><circle cx="8.5" cy="8.5" r="5"/>',
+  text: '<rect x="3.5" y="3.5" width="17" height="17" rx="3.5" fill="currentColor" fill-opacity=".16"/><path d="M8 8.5h8M12 8.5v7.5M10.2 16h3.6"/>',
+  image: '<rect x="3" y="4.5" width="18" height="15" rx="3" fill="currentColor" fill-opacity=".16"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="M3.5 17l5-4.5 3.5 3 3.5-3.5 5.5 5"/>',
+  laser: '<path d="M3.5 17l9.5-9.5 3.5 3.5-9.5 9.5h-3.5z" fill="currentColor" fill-opacity=".16"/><path d="M11 9.5l3.5 3.5"/><path d="M18 2.8v3M21.2 6.5h-3M20.5 3.7l-2 2"/>',
   laserDot: '<circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="8" opacity=".35"/>',
   laserTrail: '<path d="M3.5 17c3-6 6 2 9-4s4-6 7-5"/><circle cx="19.5" cy="8" r="2" fill="currentColor" stroke="none"/>',
-  undo: '<path d="M9.5 14.5L5 10l4.5-4.5"/><path d="M5 10h9.5a4.5 4.5 0 0 1 0 9H12"/>',
-  redo: '<path d="M14.5 14.5L19 10l-4.5-4.5"/><path d="M19 10H9.5a4.5 4.5 0 0 0 0 9H12"/>',
-  pages: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>',
-  mark: '<path d="M7 4.5h10v15l-5-3.6-5 3.6z"/>',
+  undo: '<path d="M8.5 4.5L4 9l4.5 4.5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H9"/>',
+  redo: '<path d="M15.5 4.5L20 9l-4.5 4.5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H15"/>',
+  pages: '<rect x="3.5" y="3.5" width="7" height="7" rx="2" fill="currentColor" fill-opacity=".16"/><rect x="13.5" y="3.5" width="7" height="7" rx="2" fill="currentColor" fill-opacity=".16"/><rect x="3.5" y="13.5" width="7" height="7" rx="2" fill="currentColor" fill-opacity=".16"/><rect x="13.5" y="13.5" width="7" height="7" rx="2" fill="currentColor" fill-opacity=".16"/>',
+  mark: '<path d="M6.5 5.5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2V20.5L12 16.5l-5.5 4z" fill="currentColor" fill-opacity=".16"/>',
   markOn: '<path d="M7 4.5h10v15l-5-3.6-5 3.6z" fill="currentColor"/>',
-  addPage: '<path d="M13.5 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9z"/><path d="M13.5 3.5V9H19"/><path d="M12 12v5M9.5 14.5h5"/>',
+  addPage: '<path d="M14 3H7a2.5 2.5 0 0 0-2.5 2.5v13A2.5 2.5 0 0 0 7 21h10a2.5 2.5 0 0 0 2.5-2.5V8.5z" fill="currentColor" fill-opacity=".16"/><path d="M14 3v5.5h5.5"/><path d="M12 11.5v6M9 14.5h6"/>',
   toTask: '<rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M8 12l3 3 5-6"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/><circle cx="12" cy="12" r="6.3"/>',
   tune: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   more: '<circle cx="6" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="18" cy="12" r="1.3" fill="currentColor"/>',
-  hand: '<path d="M8 13V6.5a1.5 1.5 0 0 1 3 0V12"/><path d="M11 11V5a1.5 1.5 0 0 1 3 0v6"/><path d="M14 11V6.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-.5a6 6 0 0 1-4.9-2.5L3.8 14a1.5 1.5 0 0 1 2.4-1.8L8 14.5"/>',
+  hand: '<path d="M8 12.5V6a1.5 1.5 0 0 1 3 0v5.5-7a1.5 1.5 0 0 1 3 0v7-5.5a1.5 1.5 0 0 1 3 0v8a6.5 6.5 0 0 1-6.5 6.5h-.3a6 6 0 0 1-4.8-2.4l-2.6-3.5a1.5 1.5 0 0 1 2.4-1.8z" fill="currentColor" fill-opacity=".16"/>',
   zoomIn: '<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5M8 10.5h5M10.5 8v5"/>',
   zoomOut: '<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5M8 10.5h5"/>',
   fountain: '<path d="M12 3l4.5 7.5L12 21l-4.5-10.5z"/><path d="M12 10.5V14"/><circle cx="12" cy="10" r=".8" fill="currentColor"/>',
@@ -163,13 +163,26 @@ function outlinePath(P, radii) {
   }
   return path;
 }
-function penPath(s) {
+// two gentle passes that take out the stair-steps of the screen's pixels and the shake of the hand;
+// the first and last points stay exactly where the pen touched and lifted
+function soften(P) {
+  for (let pass = 0; pass < 2; pass++) {
+    const Q = P.map(p => p.slice());
+    for (let i = 1; i < P.length - 1; i++) for (const k of [0, 1]) Q[i][k] = (P[i - 1][k] + 2 * P[i][k] + P[i + 1][k]) / 4;
+    P = Q;
+  }
+  return P;
+}
+function penPath(s, live = false) {
   const o = { ...(PEN_DEFAULTS[s.style] || PEN_DEFAULTS.fountain), ...(s.o || {}) };
   const size = s.size * 1.15; // nib diameter
-  const P = streamline(s.pts, 0.12 + o.stab * 0.72, Math.max(0.5, size * 0.28));
+  // `q` is how big one screen pixel was on the page when this was written: finer than that is only noise
+  const P = soften(streamline(s.pts, 0.12 + o.stab * 0.72, Math.max(0.5, size * 0.28, (s.q ?? 1) * 1.5)));
   const real = s.pts.some(p => p[2] !== 0.5);
   const len = [0]; for (let i = 1; i < P.length; i++) len.push(len[i - 1] + dist(P[i], P[i - 1]));
-  const total = len[len.length - 1], tl = o.sharp * size * 7;
+  const total = len[len.length - 1];
+  // a dot or a tiny flick has no room to taper, or it would vanish
+  const tl = total > size * 2 ? o.sharp * size * 7 : 0;
   const ease = t => t * (2 - t);
   // pressure changes the width slowly, over a few nib widths of travel, so the line never wobbles;
   // a light hand still gets a full line, as a Pencil reports very little pressure in normal writing
@@ -181,9 +194,10 @@ function penPath(s) {
     else { const sp = Math.min(1, d / size), rp = Math.min(1, 1 - sp); pr = Math.min(1, pr + (rp - pr) * sp * 0.275); }
     let r = size * (0.5 - o.thin * (0.5 - pr));
     if (tl > 0) { r *= ease(Math.min(1, 0.15 + len[i] / tl)); r *= ease(Math.min(1, 0.15 + (total - len[i]) / tl)); }
-    return Math.max(size * 0.04, r);
+    return Math.max(total > size * 2 ? size * 0.04 : size * 0.6, r);
   });
-  const C = curve(P.map((p, i) => [p[0], p[1], radii[i]]), Math.max(0.3, size * 0.3));
+  // the saved line is finer, so it stays round when zoomed far in; the live one has to be quick
+  const C = curve(P.map((p, i) => [p[0], p[1], radii[i]]), live ? Math.max(0.3, size * 0.3) : Math.max(0.12, size * 0.07));
   return outlinePath(C, C.map(q => q[2]));
 }
 // a smooth curve using each point as the control of a curve between midpoints, like the laser:
@@ -196,7 +210,7 @@ function curve(P, step) {
   let from = P[0];
   for (let i = 1; i < P.length; i++) {
     const ctl = P[i], to = i === P.length - 1 ? P[i] : mid(P[i], P[i + 1]);
-    const n = Math.min(16, Math.max(1, Math.ceil((dist(from, ctl) + dist(ctl, to)) / step)));
+    const n = Math.min(32, Math.max(1, Math.ceil((dist(from, ctl) + dist(ctl, to)) / step)));
     for (let j = 1; j <= n; j++) {
       const t = j / n, u = 1 - t;
       out.push([u * u * from[0] + 2 * u * t * ctl[0] + t * t * to[0], u * u * from[1] + 2 * u * t * ctl[1] + t * t * to[1], u * u * from[2] + 2 * u * t * ctl[2] + t * t * to[2]]);
@@ -238,7 +252,7 @@ function drawStroke(c, s, live = false) {
     c.stroke();
   } else {
     let path = live ? null : pathCache.get(s);
-    if (!path) { path = s.tool === 'hl' ? hlPath(s) : penPath(s); if (!live) pathCache.set(s, path); }
+    if (!path) { path = s.tool === 'hl' ? hlPath(s) : penPath(s, live); if (!live) pathCache.set(s, path); }
     c.fillStyle = s.color;
     if (s.tool === 'hl') c.globalAlpha = s.o?.alpha ?? HL_DEFAULTS.alpha;
     c.fill(path, 'nonzero');
@@ -280,6 +294,30 @@ function strokeHit(s, q, r) {
   if (p.length === 1) return dist(p[0], q) < r;
   for (let i = 1; i < p.length; i++) if (segDist(q, p[i - 1], p[i]) < r) return true;
   return false;
+}
+// a scribble goes back and forth many times inside a small area, unlike handwriting
+function isScribble(pts) {
+  if (pts.length < 12) return false;
+  const P = []; let last = pts[0];
+  P.push(last);
+  for (const p of pts) if (dist(p, last) >= 5) { P.push(p); last = p; }
+  if (P.length < 8) return false;
+  let path = 0, turns = 0, x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (let i = 0; i < P.length; i++) {
+    x0 = Math.min(x0, P[i][0]); x1 = Math.max(x1, P[i][0]); y0 = Math.min(y0, P[i][1]); y1 = Math.max(y1, P[i][1]);
+    if (i) path += dist(P[i], P[i - 1]);
+    if (i > 1) {
+      const ax = P[i - 1][0] - P[i - 2][0], ay = P[i - 1][1] - P[i - 2][1], bx = P[i][0] - P[i - 1][0], by = P[i][1] - P[i - 1][1];
+      if ((ax * bx + ay * by) / (Math.hypot(ax, ay) * Math.hypot(bx, by) || 1) < -0.35) turns++;
+    }
+  }
+  return turns >= 4 && path / (Math.hypot(x1 - x0, y1 - y0) || 1) >= 1.7;
+}
+// the strokes a scribble covers: most of the stroke has to be under it
+function scribbled(strokes, pts) {
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+  const x0 = Math.min(...xs) - 4, x1 = Math.max(...xs) + 4, y0 = Math.min(...ys) - 4, y1 = Math.max(...ys) + 4;
+  return strokes.filter(st => st.pts.filter(p => p[0] >= x0 && p[0] <= x1 && p[1] >= y0 && p[1] <= y1).length >= st.pts.length * 0.6);
 }
 function densify(pts, step) {
   const out = [pts[0]];
@@ -881,6 +919,7 @@ function renderNotebook(nb) {
         ${slider('sharp', 'حدّة الرأس', Math.round(o.sharp * 100), 0, 100, 1, Math.round(o.sharp * 100) + '%')}
         ${slider('thin', 'حساسية الضغط', Math.round(o.thin * 100), 0, 100, 1, Math.round(o.thin * 100) + '%')}
         ${slider('stab', 'ثبات الخط', Math.round(o.stab * 100), 0, 100, 1, Math.round(o.stab * 100) + '%')}
+        <label class="pp-row check"><input type="checkbox" data-pp="scribble" ${ink.scribble ? 'checked' : ''}><span>شخبط فوق الخط عشان تمسحه</span></label>
         <button class="btn small ghost" data-act="pen-reset">رجوع للإعدادات الأصلية</button>`;
     return toolPanel('أداة القلم', body);
   }
@@ -931,6 +970,7 @@ function renderNotebook(nb) {
   pop.addEventListener('input', e => {
     const el = e.target, k = el.dataset.pp; if (!k) return;
     const val = el.type === 'checkbox' ? el.checked : +el.value;
+    if (k === 'scribble') { ink.scribble = val; keepInkPrefs(); return; }
     if (k === 'mm') {
       const tk = ink.tool === 'hl' ? 'hl' : 'pen', mm = tToMm(tk, val);
       ink.sizes[tk][ink.sizeIdx[tk]] = Math.round(mm / MM[tk] * 100) / 100;
@@ -1096,7 +1136,7 @@ function renderNotebook(nb) {
     if (ink.sel) { const sv = V.get(ink.sel.pg); ink.sel = null; if (sv) renderSel(sv); }
     mode = t;
     if (t === 'pen' || t === 'hl') {
-      cur = { tool: t, style: t === 'hl' ? 'hl' : ink.penStyle, color: curColor(), size: curSize(), pts: [p], o: t === 'hl' ? { ...ink.hlOpts } : { ...ink.penOpts[ink.penStyle] } };
+      cur = { tool: t, style: t === 'hl' ? 'hl' : ink.penStyle, color: curColor(), size: curSize(), q: Math.round(100 / scale) / 100, pts: [p], o: t === 'hl' ? { ...ink.hlOpts } : { ...ink.penOpts[ink.penStyle] } };
       if (t === 'hl' && ink.hlOpts.straight) { start = p; cur.shape = 'line'; cur.pts = [p, p]; }
       holdAnchor = p; armHold();
       clearLive(v); liveFrom = 0; liveRaf = 0;
@@ -1196,7 +1236,11 @@ function renderNotebook(nb) {
     const m = mode, v = act; mode = null;
     if (!v) return;
     if (m === 'pen' || m === 'hl' || m === 'shape') {
-      if (cur && !(m === 'shape' && cur.pts.length < 2)) { pushUndo(v.pg); v.pg.strokes.push(cur); drawStroke(cur.tool === 'hl' ? v.ctx.hl : v.ctx.ink, cur); save(); bar(); refreshThumb(v.pg); }
+      const wiped = m === 'pen' && cur && ink.scribble && isScribble(cur.pts) ? scribbled(v.pg.strokes, cur.pts) : [];
+      if (wiped.length) {
+        pushUndo(v.pg); v.pg.strokes = v.pg.strokes.filter(st => !wiped.includes(st));
+        drawInk(v); save(); bar(); refreshThumb(v.pg);
+      } else if (cur && !(m === 'shape' && cur.pts.length < 2)) { pushUndo(v.pg); v.pg.strokes.push(cur); drawStroke(cur.tool === 'hl' ? v.ctx.hl : v.ctx.ink, cur); save(); bar(); refreshThumb(v.pg); }
       cur = null; clearLive(v);
     } else if (m === 'eraser') {
       if (erasing?.changed) { pushUndo(erasing.before); save(); bar(); refreshThumb(v.pg); }
