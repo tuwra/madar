@@ -10,7 +10,7 @@ const ink = {
   colors: { pen: ['#111111', '#1d4ed8', '#dc2626'], hl: ['#ffe03d', '#78e08a', '#7cb6ff'] },
   colorIdx: { pen: 0, hl: 0 },
   sizes: { pen: [1.5, 3, 5.5], hl: [3, 4.5, 7], eraser: [8, 18, 36] }, sizeIdx: { pen: 1, hl: 1, eraser: 1 },
-  penOpts: { fountain: { thin: 0.45, sharp: 0.2, stab: 0.5 }, ball: { thin: 0.12, sharp: 0, stab: 0.5 }, brush: { thin: 0.85, sharp: 0.75, stab: 0.55 } },
+  penOpts: { fountain: { thin: 0.45, sharp: 0.2, stab: 0.05 }, ball: { thin: 0.12, sharp: 0, stab: 0.05 }, brush: { thin: 0.85, sharp: 0.75, stab: 0.2 } },
   hlOpts: { alpha: 0.5, tip: 'chisel', straight: false },
   eraser: 'stroke', eraseHlOnly: false, shape: 'rect', textSize: 28, laserMode: 'trail', recentColors: [],
   zoom: 1, finger: 'auto', thumbs: false, marksOnly: false,
@@ -23,6 +23,8 @@ function applyInkPrefs(saved) {
   if (ink.tool === 'image') ink.tool = 'pen';
   if (ink.colors?.pen?.[0] === '#1f2937') ink.colors.pen[0] = '#111111';
   const f = ink.penOpts?.fountain; if (f && f.thin === 0.6 && f.sharp === 0.3) Object.assign(f, { thin: 0.45, sharp: 0.2 });
+  // the old default smoothing rounded off corners; a value the user chose stays
+  for (const [k, was, now] of [['fountain', 0.5, 0.05], ['ball', 0.5, 0.05], ['brush', 0.55, 0.2]]) if (ink.penOpts?.[k]?.stab === was) ink.penOpts[k].stab = now;
 }
 try { applyInkPrefs(JSON.parse(localStorage.getItem('madar-ink2') || 'null')); } catch { /* ignore */ }
 // called by boot once the saved data is loaded: those settings win over browser storage
@@ -153,7 +155,7 @@ function outlinePath(P, radii) {
 function penPath(s) {
   const o = { ...(PEN_DEFAULTS[s.style] || PEN_DEFAULTS.fountain), ...(s.o || {}) };
   const size = s.size * 1.15; // nib diameter
-  const P = streamline(s.pts, 0.12 + o.stab * 0.72, Math.max(0.3, size * 0.15));
+  const P = streamline(s.pts, 0.12 + o.stab * 0.72, Math.max(0.15, size * 0.06));
   const real = s.pts.some(p => p[2] !== 0.5);
   const len = [0]; for (let i = 1; i < P.length; i++) len.push(len[i - 1] + dist(P[i], P[i - 1]));
   const total = len[len.length - 1], tl = o.sharp * size * 7;
@@ -1014,9 +1016,10 @@ function renderNotebook(nb) {
   const pt = (e, v) => {
     const r = v.el.getBoundingClientRect();
     const pr = e.pointerType === 'pen' ? (e.pressure || 0.5) : 0.5;
-    return [Math.round((e.clientX - r.left) / scale * 10) / 10, Math.round((e.clientY - r.top) / scale * 10) / 10, Math.round(pr * 100) / 100];
+    return [Math.round((e.clientX - r.left) / scale * 100) / 100, Math.round((e.clientY - r.top) / scale * 100) / 100, Math.round(pr * 100) / 100];
   };
   const touches = new Map();
+  let pred = []; // where the browser expects the pencil next: drawn live only, never saved
   // keep gliding after a finger flick, like native scrolling
   const fling = { v: [0, 0], t: 0, raf: 0 };
   function runFling() {
@@ -1130,13 +1133,14 @@ function renderNotebook(nb) {
       if (cur.shape) { if (cur.shape === 'line') { cur.pts[1] = [p[0], p[1], 0.5]; clearLive(v); drawStroke(v.ctx.live, cur, true); } return; }
       for (const ev of evs) cur.pts.push(pt(ev, v));
       if (dist(p, holdAnchor) > 4 / scale) { holdAnchor = p; armHold(); }
+      pred = e.getPredictedEvents ? e.getPredictedEvents().map(ev => pt(ev, v)) : [];
       // draw at most once per screen frame; with fast writing many points arrive between frames
       if (!liveRaf) liveRaf = requestAnimationFrame(() => { liveRaf = 0; if (cur && act === v) drawLive(v); });
     } else if (mode === 'eraser') for (const ev of evs) eraseAt(v, pt(ev, v));
     else if (mode === 'lasso') {
       lasso.push(p);
       clearLive(v);
-      const c = v.ctx.live; c.save(); c.setLineDash([8 / scale, 6 / scale]); c.strokeStyle = '#4f46e5'; c.lineWidth = 1.5 / scale; c.fillStyle = 'rgba(79,70,229,.06)';
+      const c = v.ctx.live; c.save(); c.setLineDash([8 / scale, 6 / scale]); c.strokeStyle = '#007aff'; c.lineWidth = 1.5 / scale; c.fillStyle = 'rgba(0,122,255,.06)';
       c.beginPath(); c.moveTo(lasso[0][0], lasso[0][1]); for (const q of lasso) c.lineTo(q[0], q[1]); c.closePath(); c.fill(); c.stroke(); c.restore();
     } else if (mode === 'shape') { cur.pts = shapePts(ink.shape, start, p); clearLive(v); drawStroke(v.ctx.live, cur, true); }
     else if (mode === 'laser') {
@@ -1185,7 +1189,7 @@ function renderNotebook(nb) {
   function drawLive(v) {
     // the whole stroke is drawn again each frame with the same outline it will keep, so nothing
     // jumps or changes when the pencil lifts
-    clearLive(v); drawStroke(v.ctx.live, cur, true);
+    clearLive(v); drawStroke(v.ctx.live, pred.length ? { ...cur, pts: [...cur.pts, ...pred] } : cur, true);
     liveFrom = cur.pts.length;
   }
   function eraserCursor(v, p) {
@@ -1232,14 +1236,14 @@ function renderNotebook(nb) {
         const path = new Path2D(); path.moveTo(P[0][0], P[0][1]);
         for (let i = 1; i < P.length - 1; i++) path.quadraticCurveTo(P[i][0], P[i][1], (P[i][0] + P[i + 1][0]) / 2, (P[i][1] + P[i + 1][1]) / 2);
         if (P.length > 1) path.lineTo(P[P.length - 1][0], P[P.length - 1][1]); else path.lineTo(P[0][0] + 0.01, P[0][1]);
-        c.globalAlpha = a * 0.28; c.strokeStyle = '#ff2d55'; c.lineWidth = 16 / s; c.stroke(path);
-        c.globalAlpha = a; c.lineWidth = 6 / s; c.stroke(path);
-        c.globalAlpha = a * 0.95; c.strokeStyle = '#fff5f6'; c.lineWidth = 2.2 / s; c.stroke(path);
+        c.globalAlpha = a * 0.25; c.strokeStyle = '#ff3b30'; c.lineWidth = 13 / s; c.stroke(path);
+        c.globalAlpha = a; c.lineWidth = 4.5 / s; c.stroke(path);
+        c.globalAlpha = a * 0.95; c.strokeStyle = '#fff5f6'; c.lineWidth = 1.5 / s; c.stroke(path);
       }
       if (laser.dot) {
         const [x, y] = laser.dot.p, a = laser.dot.end ? Math.max(0, 1 - (now - laser.dot.end) / 250) : 1, r = 14 / s;
         const g = c.createRadialGradient(x, y, 0, x, y, r);
-        g.addColorStop(0, `rgba(255,255,255,${a})`); g.addColorStop(0.25, `rgba(255,45,85,${a})`); g.addColorStop(1, 'rgba(255,45,85,0)');
+        g.addColorStop(0, `rgba(255,255,255,${a})`); g.addColorStop(0.25, `rgba(255,59,48,${a})`); g.addColorStop(1, 'rgba(255,59,48,0)');
         c.globalAlpha = 1; c.fillStyle = g; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill();
       }
       c.restore();
