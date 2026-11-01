@@ -46,6 +46,12 @@ const curColor = (t = ink.tool) => { const k = toolKind(t); return ink.colors[k]
 const curSize = (t = ink.tool) => { const k = toolKind(t); return ink.sizes[k]?.[ink.sizeIdx[k]] ?? 3; };
 let inkApi = null;
 
+/* the pens in the tray, slanted, with the nib in the ink colour */
+const TRAY_PEN = {
+  fountain: '<path d="M22 3.5l2.5 2.5-9.5 9.5-2.5-2.5z" fill="none" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><path d="M12.5 13l2.5 2.5-2 5.5-7.5 2.5 2.5-7.5z" fill="var(--ink)" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><path d="M5.5 23.5l4-4" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/>',
+  ball: '<path d="M21.5 3.5l3 3-13 13-3-3z" fill="none" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><path d="M8.5 16.5l3 3-5.5 2.5z" fill="var(--ink)" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/>',
+  brush: '<path d="M23.5 3.5c1 1 1 2 0 3l-9 10-3-3 10-9.5c.8-.8 1.3-1.2 2-.5z" fill="none" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/><path d="M11.5 13.5l3 3c-.5 4-4.500 6.500-10 6.500 2-1.500 2-3 2.500-5 .4-2 2-4 4.500-4.500z" fill="var(--ink)" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/>',
+};
 /* line icons, drawn in the style of the rest of the app */
 const ICON = {
   back: '<path d="M9 5l7 7-7 7"/>',
@@ -529,7 +535,7 @@ function renderNotebook(nb) {
   nb.opened = Date.now();
   for (const pg of nb.pages) { pg.items ||= []; pg.strokes ||= []; pg.w ||= 1000; pg.h ||= 1414; }
   if (ui.inkPage >= nb.pages.length) ui.inkPage = nb.pages.length - 1;
-  view.innerHTML = `<div class="ink"><div class="ink-bar"></div>
+  view.innerHTML = `<div class="ink"><div class="ink-tabs"></div><div class="ink-bar"></div>
     <div class="ink-body"><div class="ink-stage"><div class="pages-col"></div></div><aside class="thumbs" hidden></aside></div>
     <div class="ink-undo"></div><div class="ink-tray" hidden></div>
     <div class="ink-float"><button class="tb small" data-act="ink-zoom" data-z="-1" title="تصغير">${ic('zoomOut')}</button><button class="zoom-n" data-act="ink-zoom" data-z="0" title="رجوع للحجم الأصلي"></button><button class="tb small" data-act="ink-zoom" data-z="1" title="تكبير">${ic('zoomIn')}</button><span class="tb-sep"></span><span class="pg-n"></span></div>
@@ -542,7 +548,7 @@ function renderNotebook(nb) {
   /* sizing */
   function computeScale() {
     const maxW = Math.max(...nb.pages.map(pageW));
-    const fit = Math.min((stage.clientWidth - 72) / maxW, 1.1);
+    const fit = Math.min((stage.clientWidth - 34) / maxW, 1.3);
     scale = Math.max(0.12, fit * ink.zoom);
   }
   function sizeShells() {
@@ -798,10 +804,11 @@ function renderNotebook(nb) {
   function bar() {
     const t = ink.tool, k = toolKind(t);
     // the floating tray under the bar: this tool's kinds, then its sizes, then its colours
+    const nib = st => `<svg class="tray-nib" viewBox="0 0 28 28" style="--ink:${curColor('pen')}">${TRAY_PEN[st]}</svg>`;
     let opts = '';
     if (t === 'pen') opts += Object.keys(PEN_STYLES).map(st => (st === ink.penStyle
-      ? `<button class="tray-pen on" data-act="ink-tool" data-tool="pen" title="إعدادات ${PEN_STYLES[st]}">${ic(st === 'fountain' ? 'pen' : st)}<svg class="tray-chev" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4"/></svg></button>`
-      : `<button class="tray-pen" data-act="tray-pen" data-s="${st}" title="${PEN_STYLES[st]}">${ic(st === 'fountain' ? 'pen' : st)}</button>`)).join('') + '<span class="tb-sep"></span>';
+      ? `<button class="tray-pen on" data-act="ink-tool" data-tool="pen" title="إعدادات ${PEN_STYLES[st]}">${nib(st)}<svg class="tray-chev" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4"/></svg></button>`
+      : `<button class="tray-pen" data-act="tray-pen" data-s="${st}" title="${PEN_STYLES[st]}">${nib(st)}</button>`)).join('') + '<span class="tb-sep"></span>';
     const sk = t === 'shape' ? 'pen' : t;
     if (['pen', 'hl', 'shape'].includes(t) || (t === 'eraser' && ink.eraser === 'part')) {
       opts += ink.sizes[sk].map((s, i) => `<button class="sslot ${i === ink.sizeIdx[sk] ? 'on' : ''}" data-act="ink-sslot" data-i="${i}" title="${i === ink.sizeIdx[sk] ? 'اضغط مرة ثانية عشان تعدّل هذا الحجم' : 'السماكة'}"><span style="height:${Math.min(8, Math.max(2, Math.round(dotPx(sk, s) / 2)))}px"></span></button>`).join('');
@@ -811,7 +818,7 @@ function renderNotebook(nb) {
     }
     const pg = curPg();
     $('.ink-bar').innerHTML = `
-      <div class="tb-side"><button class="tb tb-back" data-act="ink-back" title="الرف">${ic('back')}</button><button class="tb ${ink.thumbs ? 'on' : ''}" data-act="ink-thumbs" title="الصفحات">${ic('pages')}</button><button class="tb ${pg?.mark ? 'on' : ''}" data-act="ink-mark" title="علامة مرجعية">${ic(pg?.mark ? 'markOn' : 'mark')}</button><span class="nb-title">${esc(nb.name)}</span></div>
+      <div class="tb-side"><button class="tb ${ink.thumbs ? 'on' : ''}" data-act="ink-thumbs" title="الصفحات">${ic('pages')}</button><button class="tb ${pg?.mark ? 'on' : ''}" data-act="ink-mark" title="علامة مرجعية">${ic(pg?.mark ? 'markOn' : 'mark')}</button></div>
       <div class="tb-tools">
         ${TOOLS.map(([key, n, sc]) => `<button class="tb ${t === key ? 'on' : ''}" data-act="ink-tool" data-tool="${key}" title="${n} (${sc})">${ic(key === 'shape' ? (ink.shape || 'shape') : key === 'pen' ? (ink.penStyle === 'fountain' ? 'pen' : ink.penStyle) : key)}</button>`).join('')}
       </div>
@@ -820,6 +827,7 @@ function renderNotebook(nb) {
         <button class="tb" data-act="ink-more" title="المزيد">${ic('more')}</button>
       </div>`;
     $('.ink-undo').innerHTML = `<button class="tb" data-act="ink-undo" ${ink.undo.length ? '' : 'disabled'} title="تراجع (⌘Z)">${ic('undo')}</button><button class="tb" data-act="ink-redo" ${ink.redo.length ? '' : 'disabled'} title="إعادة (⇧⌘Z)">${ic('redo')}</button>`;
+    $('.ink-tabs').innerHTML = `<button class="tb tb-back" data-act="ink-back" title="الرف">${ic('back')}</button><span class="ink-tab">${esc(nb.name)}</span>`;
     const tray = $('.ink-tray'); tray.innerHTML = opts; tray.hidden = !opts;
     root.className = `ink tool-${t} ${fingerPans() ? 'finger-pan' : ''}`;
     for (const v of V.values()) $$('.ti', v.items).forEach(el => { el.contentEditable = t === 'text'; });
