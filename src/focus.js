@@ -193,7 +193,7 @@ const FACE_DIGIT = {
     set(d, ch) { d.dataset.c = ch; d.querySelectorAll('polygon').forEach(g => g.classList.toggle('on', LED_ON[+ch].includes(g.dataset.s))); },
   },
 };
-const FTHEMES = [['night', 'ليل'], ['sunset', 'غروب'], ['forest', 'غابة'], ['ocean', 'بحر'], ['black', 'أسود']];
+const FTHEMES = [['night', 'ليل'], ['sunset', 'غروب'], ['forest', 'غابة'], ['ocean', 'بحر'], ['black', 'أسود'], ['light', 'فاتح']];
 const fic = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 const FICON = {
   full: fic('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'),

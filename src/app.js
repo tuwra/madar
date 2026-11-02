@@ -255,6 +255,7 @@ function ask(msg, okLabel, onOk) {
 /* ---------- actions ---------- */
 const A = {
   go: a => go(a.dataset.view),
+  theme: () => window.cycleTheme(),
   toggle: a => {
     const t = state.tasks.find(x => x.id === a.closest('[data-task]').dataset.task);
     t.done = !t.done; t.doneAt = t.done ? Date.now() : null;

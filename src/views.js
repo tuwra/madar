@@ -50,6 +50,34 @@ function timeline(ds) {
   html += '</div>';
   return (allDay.length ? `<div class="tl-allday">${allDay.map(agendaItem).join('')}</div>` : '') + html;
 }
+/* ---------- weekly tasks: no set day, just has to be done this week. The week starts on Sunday ---------- */
+const curWeek = () => weekStart(todayStr());
+const weekTasks = () => state.tasks.filter(t => t.week && !t.due && !t.done && t.week <= curWeek()).sort((a, b) => a.week.localeCompare(b.week) || byTask(a, b));
+const weekRow = (t, tag = true) => `<div class="week-item" data-task="${t.id}"><button class="check p${t.priority}" data-act="toggle" aria-label="إنجاز"></button><span>${esc(t.title)}</span>${tag && t.week < curWeek() ? '<small>من اللي فات</small>' : ''}<button class="week-today" data-act="week-today" title="خلها مهمة اليوم">لليوم</button></div>`;
+function weekCard() {
+  const list = weekTasks(), left = 6 - new Date().getDay();
+  return `<section class="card week-card">
+    <div class="week-head"><h3>مهام الأسبوع</h3><small>${left ? `باقي ${left === 1 ? 'يوم' : left === 2 ? 'يومين' : `${left} أيام`}` : 'آخر يوم'}</small>
+      <form data-week><input name="w" placeholder="لازم أخلص هذا الأسبوع…" autocomplete="off" aria-label="مهمة أسبوعية"></form></div>
+    ${list.length ? `<div class="week-list">${list.map(t => weekRow(t)).join('')}</div>` : ''}
+  </section>`;
+}
+function weekSuggest() {
+  const list = weekTasks().slice(0, 3);
+  return list.length ? `<div class="week-suggest"><b>من مهام الأسبوع، تبي تخلص وحدة اليوم؟</b>${list.map(t => weekRow(t, false)).join('')}</div>` : '';
+}
+document.addEventListener('submit', e => {
+  if (!e.target.matches('form[data-week]')) return;
+  e.preventDefault();
+  const title = e.target.elements.w.value.trim(); if (!title) return;
+  const p = parseQuick(title, {});
+  state.tasks.push({ ...newTask(p.title, 'inbox', null, p.priority), week: curWeek() });
+  save(); render(); $('form[data-week] input')?.focus();
+});
+A['week-today'] = a => {
+  const t = state.tasks.find(x => x.id === a.closest('[data-task]').dataset.task);
+  if (t) { t.due = todayStr(); delete t.week; save(); render(); }
+};
 function renderToday() {
   const td = todayStr(), h = new Date().getHours();
   const late = state.tasks.filter(t => !t.done && t.due && t.due < td).sort(byTask);
@@ -76,6 +104,7 @@ function renderToday() {
         <div class="card-list">
           ${late.length ? `<h2>متأخرة</h2>${taskList2(late)}` : ''}
           ${today.length ? `${late.length ? '<h2>اليوم</h2>' : ''}${taskList2(today)}` : (!late.length ? `<div class="empty-box">${EMPTY_ART}<span>ما عندك مهام اليوم</span></div>` : '')}
+          ${all.length === done ? weekSuggest() : ''}
         </div>
       </section>
       <section class="card tl-card">
@@ -87,6 +116,7 @@ function renderToday() {
         <form data-qn><textarea id="qn" rows="3" placeholder="اكتب فكرة… أول سطر يصير العنوان. ⌘↩ للحفظ"></textarea><div class="row"><span class="grow"></span><button class="btn primary small">حفظ في الملاحظات</button></div></form>
       </section>
       ${todayHabits()}
+      ${weekCard()}
       <section class="card recent-card">
         <div class="card-head"><h3>كمّل من وين وقفت</h3></div>
         <div class="recent">
@@ -195,6 +225,7 @@ function taskMenu(t, x, y) {
     { row: [
       { title: 'اليوم', html: '☀️', run: () => set({ due: td }) },
       { title: 'غداً', html: '🌅', run: () => set({ due: addDays(td, 1) }) },
+      { title: 'لازم هذا الأسبوع', html: '<small>الأسبوع</small>', run: () => set({ due: null, time: null, week: curWeek() }) },
       { title: 'الأسبوع الجاي', html: '🗓️', run: () => set({ due: nextWeek }) },
       { title: 'بدون تاريخ', html: '⊘', run: () => set({ due: null, time: null }) },
     ] },
