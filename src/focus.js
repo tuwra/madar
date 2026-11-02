@@ -5,7 +5,7 @@
  */
 const POMO = { work: 25, short: 5, long: 15, every: 4 };
 const PHASES = { work: 'تركيز', short: 'استراحة قصيرة', long: 'استراحة طويلة' };
-const timer = { theme: 'night', mode: 'pomo', phase: 'work', round: 1, taskId: null, customMins: 240, running: false, endAt: 0, left: 0, dur: 0, segStart: 0, worked: 0, started: 0, finished: null };
+const timer = { theme: 'night', face: 'digital', vol: 0.7, mode: 'pomo', phase: 'work', round: 1, taskId: null, customMins: 240, running: false, endAt: 0, left: 0, dur: 0, segStart: 0, worked: 0, started: 0, finished: null };
 try { Object.assign(timer, JSON.parse(localStorage.getItem('madar-timer') || '{}')); } catch { /* private mode */ }
 const keepTimer = () => { try { localStorage.setItem('madar-timer', JSON.stringify(timer)); } catch { /* ignore */ } };
 const pomo = () => ({ ...POMO, ...(state.prefs?.pomo || {}) });
@@ -81,12 +81,13 @@ function renderFocus() {
   const locked = timerActive();
   const editable = timer.mode !== 'stop' && (locked || timer.mode === 'custom');
   view.innerHTML = `<div class="wrap wide focus-page">
-    <section class="fstage" id="fstage" data-theme="${timer.theme}">
-      <div class="fs-bg"><i></i><i></i><i></i></div><div class="fs-wave"></div>
+    <section class="fstage" id="fstage" data-theme="${timer.theme}" data-face="${timer.face}">
+      <div class="fs-bg"><i></i><i></i><i></i><div class="fs-liquid" id="f-liquid"><svg viewBox="0 0 1200 40" preserveAspectRatio="none"><path d="M0 20C150 0 150 0 300 20S450 40 600 20 750 0 900 20 1050 40 1200 20V40H0Z"/></svg></div></div><div class="fs-wave"></div>
       <div class="fs-top">
         <div class="fs-modes">${[['pomo', 'بومودورو'], ['custom', 'مؤقت'], ['stop', 'ساعة إيقاف']].map(([k, n]) => `<button class="${timer.mode === k ? 'on' : ''}" data-act="focus-mode" data-m="${k}" ${locked ? 'disabled' : ''}>${n}</button>`).join('')}</div>
         <div class="fs-tools">
           <div class="fs-themes">${FTHEMES.map(([k, n]) => `<button class="fs-sw sw-${k} ${timer.theme === k ? 'on' : ''}" data-act="focus-theme" data-t="${k}" title="${n}" aria-label="${n}"></button>`).join('')}</div>
+          <input class="fs-vol" id="f-vol" type="range" min="0" max="1" step="0.01" value="${timer.vol}" dir="ltr" aria-label="مستوى الصوت" title="مستوى الصوت" hidden>
           <button class="fs-ic" id="f-sound" data-act="focus-sound" title="صوت هادي للمذاكرة" aria-label="صوت هادي للمذاكرة">${FICON.sound}</button>
           <button class="fs-ic" id="f-full" data-act="focus-full" title="ملء الشاشة (F)" aria-label="ملء الشاشة">${FICON.full}</button>
         </div>
@@ -98,6 +99,7 @@ function renderFocus() {
         <div class="fs-sub"><span id="f-sub"></span><span id="f-end" dir="ltr"></span></div>
       </div>
       <div class="fs-bottom">
+        <div class="fs-faces">${FFACES.map(([k, n]) => `<button class="${timer.face === k ? 'on' : ''}" data-act="focus-face" data-f="${k}">${n}</button>`).join('')}</div>
         <div class="f-btns" id="f-btns"></div>
         ${editable ? '<div class="fs-adjust"><button data-act="focus-add" data-m="-5">−٥ د</button><button data-act="focus-add" data-m="5">+٥ د</button></div>' : ''}
         ${timer.mode === 'custom' && !locked ? `<div class="f-presets">${[15, 30, 45, 60, 120, 240].map(m => `<button class="chip-btn ${timer.customMins === m ? 'on' : ''}" data-act="focus-mins" data-m="${m}">${fmtMins(m)}</button>`).join('')}
@@ -114,18 +116,27 @@ function renderFocus() {
     </div></div>`;
   paintFocus();
 }
-// each digit is its own element, so only the one that changed rolls
+// each digit is its own element, so only the one that changed moves
 function paintDigits(el, text) {
   el.classList.toggle('long', text.length > 5);
   if (el.dataset.t === text) return;
-  const had = el.children.length === text.length;
-  if (!had) el.innerHTML = [...text].map(ch => `<span>${ch}</span>`).join('');
-  else [...text].forEach((ch, i) => {
-    const d = el.children[i];
-    if (d.textContent === ch) return;
-    d.textContent = ch; d.classList.remove('roll'); void d.offsetWidth; d.classList.add('roll');
-  });
+  const build = FACE_DIGIT[timer.face] || FACE_DIGIT.digital;
+  if (el.children.length !== text.length || [...text].some((ch, i) => (ch === ':') !== el.children[i].classList.contains('sep'))) {
+    el.innerHTML = [...text].map(ch => build.make(ch)).join('');
+  } else [...text].forEach((ch, i) => { const d = el.children[i]; if (d.dataset.c !== ch) build.set(d, ch); });
   el.dataset.t = text;
+}
+function paintFace(text, sweep) {
+  const el = $('#f-clock'), round = timer.face === 'ring' || timer.face === 'dial';
+  if (el.dataset.face !== timer.face) {
+    el.dataset.face = timer.face; delete el.dataset.t;
+    el.innerHTML = timer.face === 'ring' ? '<svg class="fc-ring" viewBox="0 0 260 260"><circle class="bg" cx="130" cy="130" r="122"/><circle class="on" cx="130" cy="130" r="122" pathLength="1000"/></svg><span class="fc-digits"></span>'
+      : timer.face === 'dial' ? '<span class="fc-pie"></span><span class="fc-hub"></span><span class="fc-digits"></span>' : '';
+  }
+  paintDigits(round ? el.querySelector('.fc-digits') : el, text);
+  $('#fstage').style.setProperty('--sweep', sweep);
+  el.querySelector('.fc-ring .on')?.setAttribute('stroke-dasharray', `${sweep * 1000} 1000`);
+  $('#f-liquid').style.height = `${sweep * 100}%`;
 }
 let pill = null;
 function paintFocus() {
@@ -136,12 +147,13 @@ function paintFocus() {
     const pct = timer.mode === 'stop' ? 1 : (timer.dur ? Math.max(0, left / timer.dur) : 1);
     stage.classList.toggle('rest', !isWork()); stage.classList.toggle('going', timer.running); stage.classList.toggle('paused', active && !timer.running);
     $('#f-prog').style.transform = `scaleX(${pct})`;
-    paintDigits($('#f-clock'), clock);
+    if (inFs() && !document.body.classList.contains('f-idle')) stage.style.setProperty('--bot', `${$('.fs-bottom').offsetHeight + $('.fs-foot').offsetHeight + 34}px`);
+    paintFace(clock, timer.mode === 'stop' ? (workedNow() / 60000) % 1 : pct);
     $('#f-phase').textContent = timer.mode === 'pomo' ? `${PHASES[timer.phase]} · الجولة ${timer.round} من ${pomo().every}` : timer.mode === 'stop' ? 'ساعة إيقاف' : 'مؤقت';
     $('#f-sub').textContent = task ? task.title : '';
     $('#f-end').textContent = timer.running && timer.mode !== 'stop' ? `← ${dayTime(timer.endAt)}` : '';
     $('#f-now').textContent = dayTime(Date.now());
-    $('#f-sound').classList.toggle('on', !!noise);
+    $('#f-sound').classList.toggle('on', !!noise); $('#f-vol').hidden = !noise;
     $('#f-full').innerHTML = document.body.classList.contains('focus-fs') ? FICON.exit : FICON.full;
     const btns = $('#f-btns'), key = `${timer.running}|${active}|${!!task}`;
     if (btns.dataset.key !== key) {
@@ -157,6 +169,30 @@ function paintFocus() {
   pill.hidden = !active || ui.view === 'focus';
   if (!pill.hidden) { pill.classList.toggle('paused', !timer.running); pill.innerHTML = `<i></i><b dir="ltr">${clock}</b>${task ? `<span>${esc(task.title)}</span>` : ''}`; }
 }
+const FFACES = [['digital', 'رقمي'], ['flip', 'قلّاب'], ['ring', 'دائرة'], ['dial', 'قرص'], ['led', 'ليد'], ['wave', 'موج']];
+const LED_SEGS = { a: '12,2 48,2 42,9 18,9', b: '51,4 58,10 58,44 53,49 46,44 46,10', c: '53,51 58,56 58,90 51,96 46,90 46,56', d: '18,91 42,91 48,98 12,98', e: '7,51 2,56 2,90 9,96 14,90 14,56', f: '9,4 2,10 2,44 7,49 14,44 14,10', g: '10,50 16,46 44,46 50,50 44,54 16,54' };
+const LED_ON = ['abcdef', 'bc', 'abged', 'abgcd', 'fgbc', 'afgcd', 'afgedc', 'abc', 'abcdefg', 'abcdfg'];
+const sepHtml = (inner = ':') => `<span class="sep" data-c=":">${inner}</span>`;
+const FACE_DIGIT = {
+  digital: {
+    make: ch => ch === ':' ? sepHtml() : `<span data-c="${ch}">${ch}</span>`,
+    set(d, ch) { d.dataset.c = ch; d.textContent = ch; d.classList.remove('roll'); void d.offsetWidth; d.classList.add('roll'); },
+  },
+  // a card has the new top and the old bottom showing, with two flaps turning between them
+  flip: {
+    make: ch => ch === ':' ? sepHtml('<i></i><i></i>') : `<span class="fl" data-c="${ch}"><span class="h top"><b>${ch}</b></span><span class="h bot"><b>${ch}</b></span><span class="h top ft"><b>${ch}</b></span><span class="h bot fb"><b>${ch}</b></span></span>`,
+    set(d, ch) {
+      const old = d.dataset.c, [top, bot, ft, fb] = d.querySelectorAll('b');
+      d.dataset.c = ch; top.textContent = ch; bot.textContent = old; ft.textContent = old; fb.textContent = ch;
+      d.classList.remove('go'); void d.offsetWidth; d.classList.add('go');
+    },
+  },
+  led: {
+    make: ch => ch === ':' ? sepHtml('<svg viewBox="0 0 20 100"><circle cx="10" cy="32" r="6"/><circle cx="10" cy="68" r="6"/></svg>')
+      : `<svg class="led" data-c="${ch}" viewBox="0 0 60 100">${Object.entries(LED_SEGS).map(([k, pts]) => `<polygon points="${pts}" class="${LED_ON[+ch].includes(k) ? 'on' : ''}" data-s="${k}"/>`).join('')}</svg>`,
+    set(d, ch) { d.dataset.c = ch; d.querySelectorAll('polygon').forEach(g => g.classList.toggle('on', LED_ON[+ch].includes(g.dataset.s))); },
+  },
+};
 const FTHEMES = [['night', 'ليل'], ['sunset', 'غروب'], ['forest', 'غابة'], ['ocean', 'بحر'], ['black', 'أسود']];
 const fic = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 const FICON = {
@@ -224,12 +260,17 @@ function toggleNoise() {
     for (let i = 0; i < d.length; i++) { v = (v + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = v * 3.5; }
     const src = ac.createBufferSource(), gain = ac.createGain();
     src.buffer = buf; src.loop = true; gain.gain.value = 0; src.connect(gain); gain.connect(ac.destination); src.start();
-    gain.gain.setTargetAtTime(0.5, ac.currentTime, 0.5);
+    gain.gain.setTargetAtTime(timer.vol ** 2, ac.currentTime, 0.5); // ears hear loudness on a curve
     noise = { ac, gain };
   } catch { toast('الصوت مو متاح هنا'); }
   paintFocus();
 }
 
+document.addEventListener('input', e => {
+  if (e.target.id !== 'f-vol') return;
+  timer.vol = +e.target.value; keepTimer();
+  if (noise) noise.gain.gain.setTargetAtTime(timer.vol ** 2, noise.ac.currentTime, 0.05);
+});
 setInterval(() => {
   if (typeof state === 'undefined' || !state) return;
   if (ui.view !== 'focus' && inFs()) exitFs();
@@ -308,6 +349,7 @@ Object.assign(A, {
   'focus-toggle': () => { if (timer.running) pauseClock(); else startClock(); wake(); },
   'focus-full': () => { if (inFs()) exitFs(); else enterFs(); },
   'focus-theme': a => { timer.theme = a.dataset.t; keepTimer(); render(); },
+  'focus-face': a => { timer.face = a.dataset.f; keepTimer(); render(); },
   'focus-sound': () => toggleNoise(),
   'focus-add': a => addTime(+a.dataset.m),
   'focus-pause': () => pauseClock(),

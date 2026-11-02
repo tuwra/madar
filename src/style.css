@@ -1077,8 +1077,10 @@ dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 40px); 
 @keyframes fs-wave { from { transform: scale(.4); opacity: .9; } to { transform: scale(4.5); opacity: 0; } }
 @keyframes fs-pop { 40% { transform: scale(1.08); } }
 .focus-fs .fstage { position: fixed; inset: 0; z-index: 85; min-height: 0; border-radius: 0; padding: max(20px, env(safe-area-inset-top)) 34px max(16px, env(safe-area-inset-bottom)); }
-.focus-fs .fs-clock { font-size: min(27cqw, 60vh); }
-.focus-fs .fs-clock.long { font-size: min(19cqw, 52vh); }
+.focus-fs .fs-clock { font-size: min(27cqw, calc(100vh - var(--bot, 240px) - 170px)); }
+.focus-fs.f-idle .fs-clock { font-size: min(27cqw, 62vh); }
+.focus-fs .fs-clock.long { font-size: min(19cqw, calc(100vh - var(--bot, 240px) - 170px)); }
+.focus-fs.f-idle .fs-clock.long { font-size: min(19cqw, 62vh); }
 .focus-fs .fs-phase { font-size: 19px; }
 .focus-fs .fs-sub { font-size: 20px; }
 .focus-fs .fs-track { height: 6px; }
@@ -1087,3 +1089,76 @@ dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 40px); 
 @media (max-height: 620px) { .focus-fs .f-task { display: none; } }
 @media (hover: none) { .fs-keys { display: none; } }
 @media (prefers-reduced-motion: reduce) { .fs-bg i, .fs-clock span.roll, .fstage.paused .fs-clock { animation: none; } }
+
+/* timer: volume and clock faces */
+.fs-vol { width: 110px; height: 22px; accent-color: #fff; background: none !important; padding: 0; }
+.fs-vol[hidden] { display: none; }
+.fs-faces { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+.fs-faces button { border: 0; background: rgba(255,255,255,.08); color: rgba(255,255,255,.75); font-size: 13px; padding: 5px 13px; border-radius: 99px; }
+.fs-faces button:hover { background: rgba(255,255,255,.18); }
+.fs-faces button.on { background: rgba(255,255,255,.9); color: #111; font-weight: 600; }
+/* in full screen the clock sits in the middle of the whole screen and the controls float over it, so it works as a wallpaper */
+.focus-fs .fs-center { position: absolute; inset: 64px 0 var(--bot, 240px); z-index: 0; pointer-events: none; padding: 0 16px; transition: inset .45s; }
+.focus-fs.f-idle .fs-center { inset: 0; }
+.focus-fs .fs-clock { transition: font-size .45s, width .45s; }
+.focus-fs .fs-center > * { pointer-events: auto; }
+.focus-fs .fs-top, .focus-fs .fs-bottom, .focus-fs .fs-foot { position: relative; z-index: 1; }
+.focus-fs .fs-bottom { margin-top: auto; }
+.fs-liquid { display: none; }
+.fstage[data-face="ring"] .fs-track, .fstage[data-face="dial"] .fs-track, .fstage[data-face="wave"] .fs-track { display: none; }
+/* flip */
+.fs-clock[data-face="flip"], .fs-clock[data-face="led"] { direction: ltr; align-items: center; text-shadow: none; }
+.fs-clock[data-face="flip"] { font-size: clamp(50px, 21cqw, 170px); gap: .05em; font-weight: 600; }
+.fs-clock[data-face="flip"].long { font-size: clamp(40px, 14cqw, 130px); }
+.focus-fs .fs-clock[data-face="flip"] { font-size: min(25cqw, calc((100vh - var(--bot, 240px) - 170px) / 1.3)); }
+.focus-fs.f-idle .fs-clock[data-face="flip"] { font-size: min(25cqw, 48vh); }
+.focus-fs .fs-clock[data-face="flip"].long { font-size: min(16.5cqw, calc((100vh - var(--bot, 240px) - 170px) / 1.3)); }
+.focus-fs.f-idle .fs-clock[data-face="flip"].long { font-size: min(16.5cqw, 48vh); }
+.fl { position: relative; display: block; width: .74em; height: 1.24em; perspective: 3em; padding: 0; }
+.fl .h { position: absolute; left: 0; right: 0; height: calc(50% - .006em); overflow: hidden; background: linear-gradient(#26262c, #1b1b20); color: #f4f4f5; }
+.fl .top { top: 0; border-radius: .09em .09em 0 0; }
+.fl .bot { bottom: 0; border-radius: 0 0 .09em .09em; background: linear-gradient(#1b1b20, #141418); }
+.fl b { display: block; height: 1.24em; line-height: 1.24em; text-align: center; font-weight: 600; }
+.fl .bot b { margin-top: -.614em; }
+.fl .ft, .fl .fb { visibility: hidden; backface-visibility: hidden; }
+.fl .ft { transform-origin: bottom; z-index: 2; } .fl .fb { transform-origin: top; z-index: 2; }
+.fl.go .ft { visibility: visible; animation: fl-top .26s ease-in forwards; }
+.fl.go .fb { visibility: visible; transform: rotateX(90deg); animation: fl-bot .26s .26s ease-out forwards; }
+@keyframes fl-top { to { transform: rotateX(-90deg); } }
+@keyframes fl-bot { to { transform: rotateX(0); } }
+.fs-clock[data-face="flip"] .sep { display: flex; flex-direction: column; gap: .24em; padding: 0 .05em; }
+.fs-clock[data-face="flip"] .sep i { width: .1em; height: .1em; border-radius: 50%; background: rgba(255,255,255,.8); }
+/* ring and dial */
+.fs-clock[data-face="ring"], .fs-clock[data-face="dial"] { position: relative; display: block; width: min(52cqw, 380px); min-width: 250px; aspect-ratio: 1; container-type: inline-size; font-size: inherit; text-shadow: none; }
+.focus-fs .fs-clock[data-face="ring"], .focus-fs .fs-clock[data-face="dial"] { width: min(70cqw, calc(100vh - var(--bot, 240px) - 130px)); min-width: 0; }
+.focus-fs.f-idle .fs-clock[data-face="ring"], .focus-fs.f-idle .fs-clock[data-face="dial"] { width: min(70cqw, 78vh); }
+.fs-clock .fc-digits { padding: 0; position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; direction: ltr; font-size: 25cqw; font-weight: 300; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.fs-clock .fc-digits.long { font-size: 17cqw; }
+.fc-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); filter: drop-shadow(0 0 14px color-mix(in srgb, var(--glow) 60%, transparent)); }
+.fc-ring circle { fill: none; stroke-width: 7; }
+.fc-ring .bg { stroke: rgba(255,255,255,.12); }
+.fc-ring .on { stroke: var(--glow); stroke-linecap: round; transition: stroke-dasharray .5s linear; }
+.fc-pie { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(var(--glow) calc(var(--sweep, 1) * 360deg), rgba(255,255,255,.08) 0deg); box-shadow: 0 0 70px color-mix(in srgb, var(--glow) 30%, transparent); }
+.fc-pie::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: repeating-conic-gradient(var(--base) 0 .5deg, transparent 0 6deg); }
+.fc-hub { position: absolute; inset: 21%; border-radius: 50%; background: var(--base); box-shadow: 0 6px 30px rgba(0,0,0,.45); }
+.fs-clock[data-face="dial"] .fc-digits { font-size: 15cqw; font-weight: 400; }
+.fs-clock[data-face="dial"] .fc-digits.long { font-size: 11cqw; }
+/* led */
+.fs-clock[data-face="led"] { font-size: clamp(70px, 25cqw, 190px); gap: .06em; }
+.fs-clock[data-face="led"].long { font-size: clamp(50px, 18cqw, 150px); }
+.focus-fs .fs-clock[data-face="led"] { font-size: min(27cqw, calc((100vh - var(--bot, 240px) - 170px) / 1)); }
+.focus-fs.f-idle .fs-clock[data-face="led"] { font-size: min(27cqw, 62vh); }
+.focus-fs .fs-clock[data-face="led"].long { font-size: min(20cqw, calc((100vh - var(--bot, 240px) - 170px) / 1)); }
+.focus-fs.f-idle .fs-clock[data-face="led"].long { font-size: min(20cqw, 62vh); }
+.fs-clock .led { width: .6em; height: 1em; filter: drop-shadow(0 0 .04em var(--glow)); }
+.fs-clock[data-face="led"] .sep { display: flex; }
+.fs-clock[data-face="led"] .sep svg { width: .2em; height: 1em; fill: var(--glow); filter: drop-shadow(0 0 .05em var(--glow)); }
+.led polygon { fill: rgba(255,255,255,.05); transition: fill .08s; }
+.led polygon.on { fill: var(--glow); }
+/* wave: the screen itself is the timer, and the water goes down as time runs */
+.fstage[data-face="wave"] .fs-liquid { display: block; position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(color-mix(in srgb, var(--a) 90%, #fff 8%), var(--b)); transition: height .5s linear; }
+.fs-liquid svg { position: absolute; left: 0; bottom: calc(100% - 1px); width: 200%; height: 34px; fill: color-mix(in srgb, var(--a) 90%, #fff 8%); animation: fs-wave-x 7s linear infinite; }
+.fstage.paused .fs-liquid svg { animation-play-state: paused; }
+@keyframes fs-wave-x { to { transform: translateX(-50%); } }
+.fstage[data-face="wave"] .fs-clock { text-shadow: 0 2px 40px rgba(0,0,0,.35); }
+@media (prefers-reduced-motion: reduce) { .fs-liquid svg, .fl.go .ft, .fl.go .fb { animation: none; } .fl.go .ft, .fl.go .fb { visibility: hidden; } }
