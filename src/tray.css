@@ -139,3 +139,4 @@ footer button svg { width: 14px; height: 14px; }
 .hb.done .hb-ic { background: var(--c); color: #fff; font-weight: 700; }
 .hb.done { color: var(--muted); }
 .hb.pop { animation: pop .3s ease-out; }
+.note-body p, .note-body h3, .note-body h4 { unicode-bidi: plaintext; text-align: start; }

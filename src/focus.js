@@ -5,7 +5,7 @@
  */
 const POMO = { work: 25, short: 5, long: 15, every: 4 };
 const PHASES = { work: 'تركيز', short: 'استراحة قصيرة', long: 'استراحة طويلة' };
-const timer = { mode: 'pomo', phase: 'work', round: 1, taskId: null, customMins: 240, running: false, endAt: 0, left: 0, dur: 0, segStart: 0, worked: 0, started: 0, finished: null };
+const timer = { theme: 'night', mode: 'pomo', phase: 'work', round: 1, taskId: null, customMins: 240, running: false, endAt: 0, left: 0, dur: 0, segStart: 0, worked: 0, started: 0, finished: null };
 try { Object.assign(timer, JSON.parse(localStorage.getItem('madar-timer') || '{}')); } catch { /* private mode */ }
 const keepTimer = () => { try { localStorage.setItem('madar-timer', JSON.stringify(timer)); } catch { /* ignore */ } };
 const pomo = () => ({ ...POMO, ...(state.prefs?.pomo || {}) });
@@ -51,7 +51,7 @@ function finishClock() {
   }
   resetClock(); chime(); notify(title);
   toast(`⏰ ${title}`, 6000);
-  if (ui.view === 'focus') render(); else paintFocus();
+  if (ui.view === 'focus') { render(); $('#fstage').classList.add('finish'); burst($('#f-clock')); } else paintFocus();
 }
 function chime() {
   try {
@@ -79,36 +79,70 @@ function renderFocus() {
   const days = Array.from({ length: 7 }, (_, i) => addDays(td, i - 6)), tot = days.map(d => focusMins(s => s.day === d)), max = Math.max(60, ...tot);
   const byT = new Map(); for (const s of state.sessions.filter(x => x.day === td)) { const k = s.taskId || ''; byT.set(k, (byT.get(k) || 0) + s.mins); }
   const locked = timerActive();
+  const editable = timer.mode !== 'stop' && (locked || timer.mode === 'custom');
   view.innerHTML = `<div class="wrap wide focus-page">
-    <div class="focus-main card">
-      <div class="seg-tabs focus-modes">${[['pomo', 'بومودورو'], ['custom', 'مؤقت'], ['stop', 'ساعة إيقاف']].map(([k, n]) => `<button class="${timer.mode === k ? 'on' : ''}" data-act="focus-mode" data-m="${k}" ${locked ? 'disabled' : ''}>${n}</button>`).join('')}</div>
-      <div class="fring" id="fring"><svg viewBox="0 0 260 260"><circle class="fr-bg" cx="130" cy="130" r="118"/><circle class="fr-on" cx="130" cy="130" r="118" pathLength="1000"/></svg>
-        <div class="fr-in"><small id="f-phase"></small><b id="f-clock" dir="ltr"></b><small id="f-sub"></small></div></div>
-      ${timer.mode === 'custom' && !locked ? `<div class="f-presets">${[15, 30, 45, 60, 120, 240].map(m => `<button class="chip-btn ${timer.customMins === m ? 'on' : ''}" data-act="focus-mins" data-m="${m}">${fmtMins(m)}</button>`).join('')}
-        <label class="f-custom"><input type="number" id="f-h" min="0" max="23" value="${Math.floor(timer.customMins / 60)}"><span>ساعة</span><input type="number" id="f-m" min="0" max="59" value="${timer.customMins % 60}"><span>دقيقة</span></label></div>` : ''}
-      <label class="f-task"><span>المهمة</span><select id="f-task"><option value="">بدون مهمة</option>${open.map(t => `<option value="${t.id}" ${t.id === timer.taskId ? 'selected' : ''}>${esc(t.title)}</option>`).join('')}</select></label>
-      <div class="f-btns" id="f-btns"></div>
-      ${timer.mode === 'pomo' ? `<details class="f-set"><summary>إعدادات بومودورو</summary><div class="f-set-row">${[['work', 'التركيز'], ['short', 'استراحة قصيرة'], ['long', 'استراحة طويلة'], ['every', 'طويلة كل']].map(([k, n]) => `<label>${n}<input type="number" min="1" max="${k === 'every' ? 12 : 180}" data-pomo="${k}" value="${p[k]}"></label>`).join('')}</div></details>` : ''}
-    </div>
-    <aside class="focus-side">
+    <section class="fstage" id="fstage" data-theme="${timer.theme}">
+      <div class="fs-bg"><i></i><i></i><i></i></div><div class="fs-wave"></div>
+      <div class="fs-top">
+        <div class="fs-modes">${[['pomo', 'بومودورو'], ['custom', 'مؤقت'], ['stop', 'ساعة إيقاف']].map(([k, n]) => `<button class="${timer.mode === k ? 'on' : ''}" data-act="focus-mode" data-m="${k}" ${locked ? 'disabled' : ''}>${n}</button>`).join('')}</div>
+        <div class="fs-tools">
+          <div class="fs-themes">${FTHEMES.map(([k, n]) => `<button class="fs-sw sw-${k} ${timer.theme === k ? 'on' : ''}" data-act="focus-theme" data-t="${k}" title="${n}" aria-label="${n}"></button>`).join('')}</div>
+          <button class="fs-ic" id="f-sound" data-act="focus-sound" title="صوت هادي للمذاكرة" aria-label="صوت هادي للمذاكرة">${FICON.sound}</button>
+          <button class="fs-ic" id="f-full" data-act="focus-full" title="ملء الشاشة (F)" aria-label="ملء الشاشة">${FICON.full}</button>
+        </div>
+      </div>
+      <div class="fs-center">
+        <div class="fs-phase" id="f-phase"></div>
+        <button class="fs-clock" id="f-clock" data-act="focus-toggle" dir="ltr" aria-label="ابدأ أو أوقف"></button>
+        <div class="fs-track" dir="ltr"><i id="f-prog"></i></div>
+        <div class="fs-sub"><span id="f-sub"></span><span id="f-end" dir="ltr"></span></div>
+      </div>
+      <div class="fs-bottom">
+        <div class="f-btns" id="f-btns"></div>
+        ${editable ? '<div class="fs-adjust"><button data-act="focus-add" data-m="-5">−٥ د</button><button data-act="focus-add" data-m="5">+٥ د</button></div>' : ''}
+        ${timer.mode === 'custom' && !locked ? `<div class="f-presets">${[15, 30, 45, 60, 120, 240].map(m => `<button class="chip-btn ${timer.customMins === m ? 'on' : ''}" data-act="focus-mins" data-m="${m}">${fmtMins(m)}</button>`).join('')}
+          <label class="f-custom"><input type="number" id="f-h" min="0" max="23" value="${Math.floor(timer.customMins / 60)}"><span>ساعة</span><input type="number" id="f-m" min="0" max="59" value="${timer.customMins % 60}"><span>دقيقة</span></label></div>` : ''}
+        <label class="f-task"><span>المهمة</span><select id="f-task"><option value="">بدون مهمة</option>${open.map(t => `<option value="${t.id}" ${t.id === timer.taskId ? 'selected' : ''}>${esc(t.title)}</option>`).join('')}</select></label>
+      </div>
+      <div class="fs-foot"><span>اليوم ${fmtMins(focusMins(s => s.day === td))} تركيز</span><span class="fs-keys">مسافة: ابدأ أو أوقف · F: ملء الشاشة</span><b id="f-now" dir="ltr"></b></div>
+    </section>
+    <div class="focus-side">
       <section class="card"><h3>اليوم</h3><div class="f-total">${fmtMins(focusMins(s => s.day === td))}</div>
         ${[...byT].sort((a, b) => b[1] - a[1]).map(([id, m]) => `<div class="f-row"><span>${esc(state.tasks.find(t => t.id === id)?.title || state.sessions.find(s => s.taskId === id && s.title)?.title || 'بدون مهمة')}</span><b>${fmtMins(m)}</b></div>`).join('') || '<div class="hint">ما بدأت جلسة اليوم</div>'}</section>
       <section class="card"><h3>آخر ٧ أيام</h3><div class="f-bars">${days.map((d, i) => `<div class="f-bar ${d === td ? 'today' : ''}" title="${fmtMins(tot[i])}"><i style="height:${Math.max(3, tot[i] / max * 100)}%"></i><span>${DOW_SHORT[parseYmd(d).getDay()]}</span></div>`).join('')}</div></section>
-    </aside></div>`;
+      ${timer.mode === 'pomo' ? `<section class="card"><h3>إعدادات بومودورو</h3><div class="f-set-row">${[['work', 'التركيز'], ['short', 'استراحة قصيرة'], ['long', 'استراحة طويلة'], ['every', 'طويلة كل']].map(([k, n]) => `<label>${n}<input type="number" min="1" max="${k === 'every' ? 12 : 180}" data-pomo="${k}" value="${p[k]}"></label>`).join('')}</div></section>` : ''}
+    </div></div>`;
   paintFocus();
+}
+// each digit is its own element, so only the one that changed rolls
+function paintDigits(el, text) {
+  el.classList.toggle('long', text.length > 5);
+  if (el.dataset.t === text) return;
+  const had = el.children.length === text.length;
+  if (!had) el.innerHTML = [...text].map(ch => `<span>${ch}</span>`).join('');
+  else [...text].forEach((ch, i) => {
+    const d = el.children[i];
+    if (d.textContent === ch) return;
+    d.textContent = ch; d.classList.remove('roll'); void d.offsetWidth; d.classList.add('roll');
+  });
+  el.dataset.t = text;
 }
 let pill = null;
 function paintFocus() {
   const active = timerActive(), left = timerLeft(), clock = timer.mode === 'stop' ? fmtClock(workedNow()) : fmtClock(left);
   const task = state?.tasks?.find(t => t.id === timer.taskId);
-  const ring = $('#fring');
-  if (ring && ui.view === 'focus') {
+  const stage = $('#fstage');
+  if (stage && ui.view === 'focus') {
     const pct = timer.mode === 'stop' ? 1 : (timer.dur ? Math.max(0, left / timer.dur) : 1);
-    ring.classList.toggle('rest', !isWork()); ring.classList.toggle('going', timer.running);
-    ring.querySelector('.fr-on').style.strokeDasharray = `${pct * 1000} 1000`;
-    $('#f-clock').textContent = clock;
-    $('#f-phase').textContent = timer.mode === 'pomo' ? PHASES[timer.phase] : timer.mode === 'stop' ? 'ساعة إيقاف' : 'مؤقت';
-    $('#f-sub').textContent = timer.mode === 'pomo' ? `الجولة ${timer.round} من ${pomo().every}` : task ? task.title : '';
+    stage.classList.toggle('rest', !isWork()); stage.classList.toggle('going', timer.running); stage.classList.toggle('paused', active && !timer.running);
+    $('#f-prog').style.transform = `scaleX(${pct})`;
+    paintDigits($('#f-clock'), clock);
+    $('#f-phase').textContent = timer.mode === 'pomo' ? `${PHASES[timer.phase]} · الجولة ${timer.round} من ${pomo().every}` : timer.mode === 'stop' ? 'ساعة إيقاف' : 'مؤقت';
+    $('#f-sub').textContent = task ? task.title : '';
+    $('#f-end').textContent = timer.running && timer.mode !== 'stop' ? `← ${dayTime(timer.endAt)}` : '';
+    $('#f-now').textContent = dayTime(Date.now());
+    $('#f-sound').classList.toggle('on', !!noise);
+    $('#f-full').innerHTML = document.body.classList.contains('focus-fs') ? FICON.exit : FICON.full;
     const btns = $('#f-btns'), key = `${timer.running}|${active}|${!!task}`;
     if (btns.dataset.key !== key) {
       btns.dataset.key = key;
@@ -123,8 +157,82 @@ function paintFocus() {
   pill.hidden = !active || ui.view === 'focus';
   if (!pill.hidden) { pill.classList.toggle('paused', !timer.running); pill.innerHTML = `<i></i><b dir="ltr">${clock}</b>${task ? `<span>${esc(task.title)}</span>` : ''}`; }
 }
+const FTHEMES = [['night', 'ليل'], ['sunset', 'غروب'], ['forest', 'غابة'], ['ocean', 'بحر'], ['black', 'أسود']];
+const fic = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const FICON = {
+  full: fic('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'),
+  exit: fic('<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>'),
+  sound: fic('<path d="M3 10v4M7.5 6v12M12 3v18M16.5 7v10M21 10v4"/>'),
+};
+const dayTime = ms => new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+/* ---------- full screen: the real thing where the browser allows it, and always covering the whole app ---------- */
+let wakeLock = null, nativeFs = false, idleTimer = 0, wokeByTap = false;
+const fsNow = () => document.fullscreenElement || document.webkitFullscreenElement;
+const inFs = () => document.body.classList.contains('focus-fs');
+async function keepAwake() { try { wakeLock = await navigator.wakeLock?.request('screen'); } catch { /* not allowed right now */ } }
+function enterFs() {
+  document.body.classList.add('focus-fs');
+  const el = document.documentElement;
+  try { (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el)?.catch?.(() => {}); } catch { /* the overlay still covers the app */ }
+  keepAwake(); wake(); paintFocus();
+}
+function exitFs() {
+  document.body.classList.remove('focus-fs', 'f-idle'); clearTimeout(idleTimer); nativeFs = false;
+  if (fsNow()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  wakeLock?.release?.().catch?.(() => {}); wakeLock = null;
+  paintFocus();
+}
+// the controls step aside while the clock runs, and come back on any movement
+function wake() {
+  document.body.classList.remove('f-idle'); clearTimeout(idleTimer);
+  if (inFs()) idleTimer = setTimeout(() => { if (inFs() && timer.running) document.body.classList.add('f-idle'); }, 3000);
+}
+for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => {
+  if (fsNow()) nativeFs = true; else if (nativeFs && inFs()) exitFs();
+});
+document.addEventListener('visibilitychange', () => { if (inFs() && document.visibilityState === 'visible') keepAwake(); });
+document.addEventListener('mousemove', () => { if (inFs()) wake(); });
+// a tap on a sleeping screen only brings the controls back; it doesn't press what's under it
+document.addEventListener('pointerdown', () => { if (inFs()) { wokeByTap = document.body.classList.contains('f-idle'); wake(); } }, true);
+document.addEventListener('click', e => { if (wokeByTap) { wokeByTap = false; e.stopPropagation(); e.preventDefault(); } }, true);
+document.addEventListener('keydown', e => {
+  if (typeof ui === 'undefined' || ui.view !== 'focus' || e.metaKey || e.ctrlKey || e.target.matches?.('input, select, textarea, [contenteditable="true"]') || document.querySelector('dialog[open]')) return;
+  if (e.code === 'Space') { e.preventDefault(); A['focus-toggle'](); }
+  else if (e.key === 'f' || e.key === 'F' || e.key === 'ف') A['focus-full']();
+  else if (e.key === 'Escape' && inFs()) exitFs();
+  else if (e.key === 'ArrowUp' && $('.fs-adjust')) { e.preventDefault(); addTime(5); }
+  else if (e.key === 'ArrowDown' && $('.fs-adjust')) { e.preventDefault(); addTime(-5); }
+  else return;
+  wake();
+});
+function addTime(mins) {
+  const ms = mins * 60000;
+  if (!timerActive()) { timer.customMins = Math.max(1, timer.customMins + mins); resetClock(); return render(); }
+  if (timer.running) { timer.endAt = Math.max(Date.now() + 60000, timer.endAt + ms); timer.dur = Math.max(timer.dur, timer.endAt - Date.now()); }
+  else { timer.left = Math.max(60000, timer.left + ms); timer.dur = Math.max(timer.dur, timer.left); }
+  keepTimer(); paintFocus();
+}
+// soft brown noise for studying, made on the spot with no audio files
+let noise = null;
+function toggleNoise() {
+  if (noise) { const n = noise; noise = null; n.gain.gain.setTargetAtTime(0, n.ac.currentTime, 0.2); setTimeout(() => n.ac.close(), 800); return paintFocus(); }
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    const buf = ac.createBuffer(1, ac.sampleRate * 4, ac.sampleRate), d = buf.getChannelData(0);
+    let v = 0;
+    for (let i = 0; i < d.length; i++) { v = (v + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = v * 3.5; }
+    const src = ac.createBufferSource(), gain = ac.createGain();
+    src.buffer = buf; src.loop = true; gain.gain.value = 0; src.connect(gain); gain.connect(ac.destination); src.start();
+    gain.gain.setTargetAtTime(0.5, ac.currentTime, 0.5);
+    noise = { ac, gain };
+  } catch { toast('الصوت مو متاح هنا'); }
+  paintFocus();
+}
+
 setInterval(() => {
   if (typeof state === 'undefined' || !state) return;
+  if (ui.view !== 'focus' && inFs()) exitFs();
   if (timer.running && timer.endAt && Date.now() >= timer.endAt) finishClock();
   else if (timer.running || ui.view === 'focus') paintFocus();
 }, 500);
@@ -197,6 +305,11 @@ Object.assign(A, {
   'focus-mode': a => { timer.mode = a.dataset.m; timer.phase = 'work'; resetClock(); render(); },
   'focus-mins': a => { timer.customMins = +a.dataset.m; resetClock(); render(); },
   'focus-start': () => startClock(),
+  'focus-toggle': () => { if (timer.running) pauseClock(); else startClock(); wake(); },
+  'focus-full': () => { if (inFs()) exitFs(); else enterFs(); },
+  'focus-theme': a => { timer.theme = a.dataset.t; keepTimer(); render(); },
+  'focus-sound': () => toggleNoise(),
+  'focus-add': a => addTime(+a.dataset.m),
   'focus-pause': () => pauseClock(),
   'focus-stop': () => stopClock(),
   'focus-skip': () => { if (timer.mode === 'pomo') { timer.running = false; timer.worked = 0; timer.endAt = Date.now() - 1; timer.running = true; timer.segStart = timer.endAt; finishClock(); } },

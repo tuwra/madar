@@ -295,29 +295,34 @@ function strokeHit(s, q, r) {
   for (let i = 1; i < p.length; i++) if (segDist(q, p[i - 1], p[i]) < r) return true;
   return false;
 }
-// a scribble goes back and forth many times inside a small area, unlike handwriting
+// a scribble goes back and forth, turning sharply one way and then the other. A circle or a box
+// only ever turns one way, however shaky the hand, so it never counts
 function isScribble(pts) {
   if (pts.length < 12) return false;
-  const P = []; let last = pts[0];
-  P.push(last);
-  for (const p of pts) if (dist(p, last) >= 5) { P.push(p); last = p; }
-  if (P.length < 8) return false;
-  let path = 0, turns = 0, x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
-  for (let i = 0; i < P.length; i++) {
-    x0 = Math.min(x0, P[i][0]); x1 = Math.max(x1, P[i][0]); y0 = Math.min(y0, P[i][1]); y1 = Math.max(y1, P[i][1]);
-    if (i) path += dist(P[i], P[i - 1]);
-    if (i > 1) {
-      const ax = P[i - 1][0] - P[i - 2][0], ay = P[i - 1][1] - P[i - 2][1], bx = P[i][0] - P[i - 1][0], by = P[i][1] - P[i - 1][1];
-      if ((ax * bx + ay * by) / (Math.hypot(ax, ay) * Math.hypot(bx, by) || 1) < -0.35) turns++;
-    }
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+  const w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys);
+  const P = simplify(pts, Math.max(1.5, Math.min(w, h) * 0.12)); // drops the shake, keeps the real turns
+  if (P.length < 6) return false;
+  let path = 0, last = 0, turns = 0, swaps = 0;
+  for (let i = 1; i < P.length; i++) {
+    path += dist(P[i], P[i - 1]);
+    if (i < 2) continue;
+    const ax = P[i - 1][0] - P[i - 2][0], ay = P[i - 1][1] - P[i - 2][1], bx = P[i][0] - P[i - 1][0], by = P[i][1] - P[i - 1][1];
+    if ((ax * bx + ay * by) / (Math.hypot(ax, ay) * Math.hypot(bx, by) || 1) >= -0.3) continue;
+    const side = Math.sign(ax * by - ay * bx);
+    turns++; if (last && side !== last) swaps++;
+    last = side;
   }
-  return turns >= 4 && path / (Math.hypot(x1 - x0, y1 - y0) || 1) >= 1.7;
+  return turns >= 4 && swaps >= 3 && path / (Math.hypot(w, h) || 1) >= 2.2;
 }
-// the strokes a scribble covers: most of the stroke has to be under it
+// the strokes a scribble covers: most of the stroke has to lie right under the scribble's own
+// line, so neighbours that only share its bounding box are safe
 function scribbled(strokes, pts) {
   const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
-  const x0 = Math.min(...xs) - 4, x1 = Math.max(...xs) + 4, y0 = Math.min(...ys) - 4, y1 = Math.max(...ys) + 4;
-  return strokes.filter(st => st.pts.filter(p => p[0] >= x0 && p[0] <= x1 && p[1] >= y0 && p[1] <= y1).length >= st.pts.length * 0.6);
+  let path = 0; for (let i = 1; i < pts.length; i++) path += dist(pts[i], pts[i - 1]);
+  const gap = (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys)) / (path || 1); // space between its passes
+  const reach = Math.max(4, gap * 0.8);
+  return strokes.filter(st => st.pts.filter(q => pts.some((a, i) => i && segDist(q, pts[i - 1], a) < reach)).length >= st.pts.length * 0.6);
 }
 function densify(pts, step) {
   const out = [pts[0]];
@@ -1083,7 +1088,6 @@ function renderNotebook(nb) {
     return [Math.round((e.clientX - r.left) / scale * 100) / 100, Math.round((e.clientY - r.top) / scale * 100) / 100, Math.round(pr * 100) / 100];
   };
   const touches = new Map();
-  let pred = []; // where the browser expects the pencil next: drawn live only, never saved
   // keep gliding after a finger flick, like native scrolling
   const fling = { v: [0, 0], t: 0, raf: 0 };
   function runFling() {
@@ -1198,7 +1202,6 @@ function renderNotebook(nb) {
       if (cur.shape) { if (cur.shape === 'line') { cur.pts[1] = [p[0], p[1], 0.5]; clearLive(v); drawStroke(v.ctx.live, cur, true); } return; }
       for (const ev of evs) cur.pts.push(pt(ev, v));
       if (dist(p, holdAnchor) > 4 / scale) { holdAnchor = p; armHold(); }
-      pred = e.getPredictedEvents ? e.getPredictedEvents().map(ev => pt(ev, v)) : [];
       // draw at most once per screen frame; with fast writing many points arrive between frames
       if (!liveRaf) liveRaf = requestAnimationFrame(() => { liveRaf = 0; if (cur && act === v) drawLive(v); });
     } else if (mode === 'eraser') for (const ev of evs) eraseAt(v, pt(ev, v));
@@ -1236,7 +1239,7 @@ function renderNotebook(nb) {
     const m = mode, v = act; mode = null;
     if (!v) return;
     if (m === 'pen' || m === 'hl' || m === 'shape') {
-      const wiped = m === 'pen' && cur && ink.scribble && isScribble(cur.pts) ? scribbled(v.pg.strokes, cur.pts) : [];
+      const wiped = m === 'pen' && cur && !cur.shape && ink.scribble && isScribble(cur.pts) ? scribbled(v.pg.strokes, cur.pts) : [];
       if (wiped.length) {
         pushUndo(v.pg); v.pg.strokes = v.pg.strokes.filter(st => !wiped.includes(st));
         drawInk(v); save(); bar(); refreshThumb(v.pg);
@@ -1258,7 +1261,7 @@ function renderNotebook(nb) {
   function drawLive(v) {
     // the whole stroke is drawn again each frame with the same outline it will keep, so nothing
     // jumps or changes when the pencil lifts
-    clearLive(v); drawStroke(v.ctx.live, pred.length ? { ...cur, pts: [...cur.pts, ...pred] } : cur, true);
+    clearLive(v); drawStroke(v.ctx.live, cur, true);
     liveFrom = cur.pts.length;
   }
   function eraserCursor(v, p) {

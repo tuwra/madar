@@ -181,7 +181,10 @@ function renderNotes() {
   blocks.addEventListener('input', onBlockInput);
   blocks.addEventListener('keydown', onBlockKey);
   blocks.addEventListener('paste', onPaste);
-  blocks.addEventListener('focusout', e => { if (e.target.matches('.code')) highlightCode(e.target, false); });
+  blocks.addEventListener('focusout', e => {
+    if (e.target.matches('.code')) highlightCode(e.target, false);
+    if (e.target.matches('.blk-text') && holdSymbols(e.target)) { const b = blockOf(e.target); if (b) { b.html = sanitize(e.target.innerHTML); touchPage(); } }
+  });
   setupDrag(blocks);
   cleanup = () => { closeSlash(); hideFmt(); };
   if (!curPage.title && !curPage.blocks.some(textOf)) title.focus();
@@ -249,6 +252,31 @@ function renderBlocks() {
   let n = 0;
   box.innerHTML = curPage.blocks.map(b => { n = b.type === 'num' ? n + 1 : 0; return blockHtml(b, n); }).join('');
   hydrate(box);
+  applyDirs();
+}
+// like Notion, each block follows the language it starts with, bullet and checkbox included;
+// an empty block follows the one above it
+function applyDirs() {
+  let prev = 'rtl';
+  for (const el of $$('.blocks > .blk')) {
+    const text = el.querySelector('.blk-text');
+    if (!text) { el.removeAttribute('dir'); continue; }
+    const first = text.textContent.match(/\p{L}/u)?.[0];
+    prev = first ? (/[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/.test(first) ? 'rtl' : 'ltr') : prev;
+    if (el.dir !== prev) el.dir = prev;
+  }
+}
+// in an Arabic line, symbols right after an English word would jump to the wrong side of it ("C++"
+// reads "++C"). An invisible mark holds them in place; added on leaving the block, so the caret never moves
+function holdSymbols(t) {
+  if (t.closest('.blk')?.dir !== 'rtl') return false;
+  const walk = document.createTreeWalker(t, NodeFilter.SHOW_TEXT);
+  let changed = false;
+  while (walk.nextNode()) {
+    const next = walk.currentNode.data.replace(/([A-Za-z0-9][+#%!?]+)(?=\s|$)/g, '$1\u200E');
+    if (next !== walk.currentNode.data) { walk.currentNode.data = next; changed = true; }
+  }
+  return changed;
 }
 function rerenderBlock(b) {
   const el = $(`[data-blk="${b.id}"]`); if (!el) return renderBlocks();
@@ -257,6 +285,7 @@ function rerenderBlock(b) {
   const tmp = document.createElement('div'); tmp.innerHTML = blockHtml(b, n);
   el.replaceWith(tmp.firstElementChild);
   hydrate($(`[data-blk="${b.id}"]`).parentElement);
+  applyDirs();
 }
 function hydrate(root) {
   $$('[data-blob]', root).forEach(async el => { const u = await blobUrl(el.dataset.blob); if (u) el.src = u; });
@@ -306,6 +335,7 @@ function onBlockInput(e) {
     const txt = t.textContent;
     if (!txt) t.innerHTML = '';
     b.html = sanitize(t.innerHTML);
+    applyDirs();
     if (txt === '---' || txt === '***') { convertBlock(b, 'divider'); return; }
     if (txt === '```') { b.html = ''; convertBlock(b, 'code'); return; }
     const hit = SHORTCUTS.find(([re]) => re.test(txt));

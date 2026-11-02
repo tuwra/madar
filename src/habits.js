@@ -5,7 +5,8 @@ const HABIT_ICONS = ['💧', '📖', '🏃', '🧘', '🌙', '📿', '🥗', '�
 const HABIT_IDEAS = [['💧', 'شرب ماء', 8], ['📖', 'قراءة 10 صفحات', 1], ['🏃', 'رياضة', 1], ['🌙', 'نوم بدري', 1], ['📿', 'أذكار الصباح', 1], ['🚶', 'مشي 30 دقيقة', 1]];
 
 const habits = () => (state.habits ||= []).filter(h => !h.archived);
-const isDue = (h, ds) => !h.days || h.days.includes(parseYmd(ds).getDay());
+// `skip` holds single days the user hid; like a day off, it doesn't break the streak
+const isDue = (h, ds) => !h.skip?.[ds] && (!h.days || h.days.includes(parseYmd(ds).getDay()));
 const countOn = (h, ds) => h.log?.[ds] || 0;
 const doneOn = (h, ds) => countOn(h, ds) >= (h.goal || 1);
 function streak(h, upto = todayStr()) {
@@ -53,7 +54,7 @@ function renderHabits() {
   if (ui.habitDay > td) ui.habitDay = td;
   ui.habitMonth ||= td.slice(0, 7);
   const day = ui.habitDay, list = habits();
-  const due = list.filter(h => isDue(h, day)), done = due.filter(h => doneOn(h, day)).length;
+  const due = list.filter(h => isDue(h, day)), off = list.filter(h => !isDue(h, day)), done = due.filter(h => doneOn(h, day)).length;
   const pct = due.length ? Math.round(done / due.length * 100) : 0;
   const week = Array.from({ length: 7 }, (_, i) => addDays(td, i - 6));
   view.innerHTML = `<div class="wrap wide habits">
@@ -63,7 +64,8 @@ function renderHabits() {
       const dd = list.filter(h => isDue(h, ds)), dn = dd.filter(h => doneOn(h, ds)).length, p = dd.length ? dn / dd.length : 0;
       return `<button class="ws-day ${ds === day ? 'on' : ''} ${ds === td ? 'today' : ''}" data-act="habit-day" data-day="${ds}"><span>${DOW_SHORT[parseYmd(ds).getDay()]}</span><b>${parseYmd(ds).getDate()}</b><i class="ws-ring" style="--p:${Math.round(p * 100)}"></i></button>`;
     }).join('')}</div>
-    ${list.length ? `<div class="habit-grid">${list.map(h => habitCard(h, day)).join('')}</div>` : `
+    ${list.length ? `${due.length ? `<div class="habit-grid">${due.map(h => habitCard(h, day)).join('')}</div>` : `<div class="hint habit-none">ما عندك عادات ${day === td ? 'اليوم' : 'هاليوم'}</div>`}
+      ${off.length ? `<details class="habit-hidden"><summary>${off.length === 1 ? 'عادة مخفية' : off.length === 2 ? 'عادتين مخفية' : `${off.length} عادات مخفية`} ${day === td ? 'اليوم' : 'هاليوم'}</summary><div class="habit-grid">${off.map(h => habitCard(h, day)).join('')}</div></details>` : ''}` : `
       <div class="habit-empty">${EMPTY_ART}<b>ما عندك عادات للحين</b><span>اختر وحدة تبدأ فيها، أو سوّ عادتك الخاصة</span>
         <div class="idea-row">${HABIT_IDEAS.map(([i, n, g]) => `<button class="chip-btn" data-act="habit-idea" data-icon="${i}" data-name="${n}" data-goal="${g}">${i} ${n}</button>`).join('')}</div></div>`}
     ${list.length ? tracker(list) : ''}
@@ -76,11 +78,12 @@ function habitCard(h, day) {
     <button class="h-check" data-act="habit-tap" aria-label="سجّل">${ok ? '✓' : goal > 1 ? `${cnt}/${goal}` : ''}</button>
     <div class="h-body" data-act="habit-edit">
       <div class="h-top"><span class="h-icon">${h.icon}</span><b>${esc(h.name)}</b></div>
-      <div class="h-meta">${s ? `<span class="flame">🔥 ${s} ${s === 1 ? 'يوم' : s === 2 ? 'يومين' : s <= 10 ? 'أيام' : 'يوم'}</span>` : '<span>ابدأ السلسلة اليوم</span>'}${due ? '' : '<span>· مو مجدولة هاليوم</span>'}</div>
+      <div class="h-meta">${s ? `<span class="flame">🔥 ${s} ${s === 1 ? 'يوم' : s === 2 ? 'يومين' : s <= 10 ? 'أيام' : 'يوم'}</span>` : '<span>ابدأ السلسلة اليوم</span>'}${due ? '' : `<span>· ${h.skip?.[day] ? 'مخفية هاليوم' : 'مو مجدولة هاليوم'}</span>`}</div>
       ${goal > 1 ? `<div class="h-segs">${Array.from({ length: Math.min(goal, 12) }, (_, i) => `<i class="${i < cnt ? 'on' : ''}"></i>`).join('')}</div>` : ''}
       <div class="h-dots">${last7.map(ds => `<i class="${doneOn(h, ds) ? 'on' : isDue(h, ds) ? '' : 'off'}" title="${fmt(ds, { weekday: 'long' })}"></i>`).join('')}</div>
     </div>
     ${goal > 1 && cnt > 0 && !ok ? '<button class="h-minus" data-act="habit-minus" aria-label="تراجع">−</button>' : ''}
+    ${h.skip?.[day] ? '<button class="h-skip" data-act="habit-skip">رجّعها</button>' : due && !cnt ? '<button class="h-skip" data-act="habit-skip">مو اليوم</button>' : ''}
   </div>`;
 }
 function tracker(list) {
@@ -144,6 +147,12 @@ Object.assign(A, {
   'habit-idea': a => habitDialog(null, a.dataset),
   'habit-edit': a => habitDialog(habitOf(a)),
   'habit-day': a => { ui.habitDay = a.dataset.day; render(); },
+  'habit-skip': a => {
+    const h = habitOf(a), ds = ui.habitDay;
+    h.skip ||= {};
+    if (h.skip[ds]) delete h.skip[ds]; else h.skip[ds] = true;
+    save(); render();
+  },
   'habit-month': a => { ui.habitMonth = a.dataset.m; render(); },
   'habit-tap': a => {
     const h = habitOf(a), card = a.closest('.habit');
@@ -166,6 +175,7 @@ document.addEventListener('contextmenu', e => {
   showMenu(e.clientX, e.clientY, [
     { label: 'سجّل اليوم', run: () => { h.log ||= {}; h.log[todayStr()] = h.goal || 1; save(); render(); } },
     { label: 'تراجع عن اليوم', run: () => { delete h.log?.[todayStr()]; save(); render(); } },
+    { label: h.skip?.[todayStr()] ? 'رجّعها اليوم' : 'أخفها اليوم', run: () => { h.skip ||= {}; if (h.skip[todayStr()]) delete h.skip[todayStr()]; else h.skip[todayStr()] = true; save(); render(); } },
     '-',
     { label: 'تعديل', run: () => habitDialog(h) },
     { label: 'أرشفة', run: () => { h.archived = true; save(); render(); toast('انأرشفت العادة'); } },
