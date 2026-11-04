@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const IS_MAC = process.platform === 'darwin', IS_WIN = process.platform === 'win32';
 const updater = require('./updater');
+const apple = require('./apple');
 
 app.setName('Madar');
 
@@ -330,6 +331,8 @@ ipcMain.on('state:changed', () => { updateTrayTitle(); if (trayWin?.isVisible())
 
 app.on('before-quit', () => { quitting = true; });
 app.on('madar-quit-for-update', () => { quitting = true; });
+ipcMain.handle('apple:sync', (_e, items) => apple.sync(items));
+ipcMain.handle('apple:clear', () => apple.clear());
 ipcMain.handle('update:get', () => updater.getState());
 ipcMain.handle('update:check', () => updater.check(true));
 ipcMain.handle('update:install', () => updater.install());

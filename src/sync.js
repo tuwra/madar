@@ -20,6 +20,9 @@ async function storageDialog() {
       : `<div class="store-now"><b>قوقل درايف مو مثبّت على هذا الماك</b><div class="hint">نزّل «Google Drive for desktop» وسجّل دخول، وبعدها ارجع هنا.</div><a class="btn small" href="https://www.google.com/drive/download/" target="_blank" rel="noopener">صفحة التنزيل</a></div>`}
     ${info.clouds.filter(c => c.kind !== 'google').map(c => `<button class="btn" value="cloud:${esc(c.path)}">احفظ في ${CLOUD_NAMES[c.kind]}</button>`).join('')}
     <div class="row wrap"><button class="btn" value="choose">اختيار مجلد آخر…</button><button class="btn" value="reveal">فتح المجلد في Finder</button></div>
+    ${desktop.apple ? `<span class="note">التقويم والتذكيرات</span>
+    <label class="check-row"><input type="checkbox" id="apple-on" ${appleOn() ? 'checked' : ''}> اعرض مواعيدي ومهامي في تقويم الماك وتذكيراته</label>
+    <p class="note">يسوي تقويم وقائمة باسم «مدار»، فتطلع في أي تطبيق يقرأ التقويم مثل Boring Notch. وإذا شيّكت مهمة في التذكيرات تتشيّك هنا. أول مرة يسألك الماك تسمح لمدار.</p>` : ''}
     <span class="note">نسخة احتياطية</span>
     <div class="row wrap"><button class="btn" value="export">تصدير نسخة (JSON)</button><button class="btn" value="import">استرجاع من نسخة</button></div>
     <div class="row wrap" style="justify-content:center"><button class="btn small" data-act="update-check" type="button">التحقق من التحديثات</button></div>
@@ -114,3 +117,42 @@ A['update-now'] = () => {
 };
 A['update-later'] = () => { upd.dismissed = upd.st?.version; updateBar(); };
 A['update-check'] = () => desktop?.update?.check();
+
+/* ---------- Apple Calendar and Reminders (Mac app only), switched on per device ---------- */
+const appleOn = () => { try { return localStorage.getItem('madar-apple') === '1'; } catch { return false; } };
+let appleTimer = 0, appleBusy = false;
+function appleItems() {
+  const td = todayStr(), to = addDays(td, 60), week = curWeek();
+  return {
+    events: state.events.filter(e => !e.gcal && e.date >= addDays(td, -7) && e.date <= to)
+      .map(e => ({ id: e.id, title: e.title, date: e.date, start: e.start, end: e.end })),
+    tasks: state.tasks.map(t => (t.week && !t.due && !t.done ? { ...t, due: addDays(week, 6) } : t)) // a week task is due by Saturday
+      .filter(t => t.due && t.due >= addDays(td, -30) && t.due <= to && (!t.done || Date.now() - (t.doneAt || 0) < 7 * 864e5))
+      .map(t => ({ id: t.id, title: t.title, due: t.due, time: t.time || null, done: !!t.done })),
+  };
+}
+async function appleSync(loud = false) {
+  if (!desktop?.apple || !appleOn()) return;
+  if (appleBusy) { clearTimeout(appleTimer); appleTimer = setTimeout(appleSync, 5000); return; }
+  appleBusy = true;
+  try {
+    const r = await desktop.apple.sync(appleItems());
+    let ticked = 0;
+    for (const id of r.done || []) { const t = state.tasks.find(x => x.id === id); if (t && !t.done) { setTaskDone(t, true); ticked++; } }
+    if (ticked) { save(); render(); }
+    if (loud) toast('✓ مواعيدك ومهامك صارت في تقويم الماك وتذكيراته');
+  } catch (err) {
+    console.warn('apple sync failed', err);
+    if (loud) toast(/-1743|not allowed|Not authorized/i.test(err.message) ? 'الماك ما سمح لمدار. افتح إعدادات النظام ← الخصوصية والأمان ← الأتمتة، وفعّل التقويم والتذكيرات لمدار' : 'ما قدرت أوصل للتقويم والتذكيرات', 8000);
+  } finally { appleBusy = false; }
+}
+window.addEventListener('madar-saved', () => { clearTimeout(appleTimer); appleTimer = setTimeout(appleSync, 4000); });
+setInterval(appleSync, 5 * 60000); // also picks up reminders ticked off on the Mac
+setTimeout(appleSync, 8000);
+document.addEventListener('change', async e => {
+  if (e.target.id !== 'apple-on') return;
+  try { localStorage.setItem('madar-apple', e.target.checked ? '1' : '0'); } catch { /* private mode */ }
+  if (e.target.checked) { toast('يجهّز التقويم والتذكيرات…'); appleSync(true); }
+  else { await desktop.apple.clear().catch(() => {}); toast('شلت مواعيد مدار ومهامه من تقويم الماك'); }
+});
+

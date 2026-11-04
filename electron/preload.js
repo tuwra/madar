@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('madar', {
   fileExists: p => call('file:exists', p),
   ask: opts => call('ask', opts),
   changed: () => ipcRenderer.send('state:changed'),
+  apple: process.platform === 'darwin' ? { sync: items => call('apple:sync', items), clear: () => call('apple:clear') } : null,
   oauth: { listen: () => call('oauth:listen'), wait: () => call('oauth:wait') },
   secret: { get: k => call('secret:get', k), set: (k, v) => call('secret:set', k, v) },
   update: { get: () => call('update:get'), check: () => call('update:check'), install: () => call('update:install'), on: cb => ipcRenderer.on('update:state', (_e, st) => cb(st)) },

@@ -1,7 +1,7 @@
 {
   "name": "madar",
   "productName": "Madar",
-  "version": "1.8.9",
+  "version": "1.9.0",
   "description": "مدار: مهام وتقويم وملاحظات ودفاتر بخط اليد في تطبيق واحد للماك",
   "main": "electron/main.js",
   "license": "MIT",
@@ -50,7 +50,10 @@
       "target": "dmg",
       "icon": "build/icon.png",
       "identity": null,
-      "darkModeSupport": true
+      "darkModeSupport": true,
+      "extendInfo": {
+        "NSAppleEventsUsageDescription": "مدار يحط مواعيدك ومهامك في التقويم والتذكيرات عشان تطلع في تطبيقات مثل Boring Notch"
+      }
     },
     "dmg": {
       "title": "Madar ${version}",
