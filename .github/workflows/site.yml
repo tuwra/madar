@@ -4,7 +4,7 @@ name: Publish the website
 on:
   push:
     branches: [main]
-    paths: ['src/**', '.github/workflows/site.yml']
+    paths: ['src/**', 'site/**', '.github/workflows/site.yml']
   workflow_dispatch:
 
 permissions:
@@ -35,8 +35,14 @@ jobs:
         env:
           WEB_ID: ${{ secrets.MADAR_GOOGLE_WEB_ID }}
         run: node -e "require('fs').writeFileSync('src/google-config.local.js','window.MADAR_GOOGLE_LOCAL='+JSON.stringify({webId:process.env.WEB_ID||''})+';\n')"
+      # the front page at the top, and the app itself under app/
+      - name: Put the site together
+        run: |
+          mkdir -p _site
+          cp -R site/. _site/
+          cp -R src _site/app
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: src
+          path: _site
       - id: deploy
         uses: actions/deploy-pages@v4

@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>مدار · مهامك وتقويمك وملاحظاتك ودفاترك في مكان واحد</title>
+<meta name="description" content="مدار تطبيق مجاني ومفتوح المصدر بالعربي يجمع المهام والتقويم والملاحظات والدفاتر بخط اليد والعادات ومؤقت التركيز. للماك والويندوز والآيباد والمتصفح.">
+<meta name="theme-color" content="#4f46e5">
+<meta property="og:title" content="مدار">
+<meta property="og:description" content="المهام والتقويم والملاحظات والدفاتر بخط اليد في تطبيق واحد بالعربي. مجاني ومفتوح المصدر.">
+<meta property="og:image" content="https://tuwra.github.io/madar/img/today.webp">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<script src="go.js"></script>
+<link rel="stylesheet" href="app/vendor/fonts.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="top" id="top">
+  <div class="wrap top-in">
+    <a class="brand" href="#"><img src="icon.svg" alt="" width="30" height="30"><b>مدار</b></a>
+    <nav class="links">
+      <a href="#features">المزايا</a>
+      <a href="#focus">التركيز</a>
+      <a href="#download">التحميل</a>
+      <a href="#faq">أسئلة</a>
+    </nav>
+    <a class="btn small primary" href="app/">افتحه في المتصفح</a>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="glow" aria-hidden="true"></div>
+    <div class="wrap hero-in">
+      <span class="pill"><i></i>مجاني ومفتوح المصدر · <span data-version>أحدث إصدار</span></span>
+      <h1>يومك كله<br><span class="grad">في مدار واحد</span></h1>
+      <p class="lead">مهامك، وتقويمك، وملاحظاتك، ودفاترك بخط اليد، وعاداتك، ومؤقت للمذاكرة. كلها في تطبيق واحد بالعربي، بدل ما تتنقل بين أربع تطبيقات.</p>
+      <div class="cta">
+        <a class="btn big primary" id="cta-main" href="#download"><svg viewBox="0 0 24 24"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg><span>حمّله مجانًا</span></a>
+        <a class="btn big ghost" href="app/"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.8 3 2.8 15 0 18M12 3c-2.8 3-2.8 15 0 18"/></svg><span>استخدمه في المتصفح</span></a>
+      </div>
+      <p class="fine">ماك · ويندوز · آيباد · آيفون · بدون حساب، وبياناتك على جهازك</p>
+    </div>
+    <div class="wrap shots reveal">
+      <figure class="frame desk">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <picture>
+          <source srcset="img/today-dark.webp" media="(prefers-color-scheme: dark)">
+          <img src="img/today.webp" alt="صفحة اليوم في مدار: أهم ثلاث مهام، وجدول اليوم، والمهام" width="1440" height="900">
+        </picture>
+      </figure>
+      <figure class="frame phone">
+        <picture>
+          <source srcset="img/phone-dark.webp" media="(prefers-color-scheme: dark)">
+          <img src="img/phone.webp" alt="مدار على الجوال" width="390" height="844">
+        </picture>
+      </figure>
+    </div>
+  </section>
+
+  <section class="strip">
+    <div class="wrap strip-in">
+      <div><b>المهام</b><span>مثل TickTick</span></div>
+      <div><b>التقويم</b><span>بالهجري والميلادي</span></div>
+      <div><b>الملاحظات</b><span>مثل Notion</span></div>
+      <div><b>الدفاتر</b><span>مثل GoodNotes</span></div>
+    </div>
+  </section>
+
+  <section class="feature" id="features">
+    <div class="wrap feat-in reveal">
+      <div class="copy">
+        <span class="kicker">اليوم والمهام</span>
+        <h2>افتح التطبيق وتعرف وش عندك</h2>
+        <p>أهم ثلاث مهام، وجدول يومك بالساعات، والمتأخر، وعاداتك، كلها في صفحة وحدة. وتكتب المهمة بكلامك العادي، ومدار يفهم التاريخ والوقت والأولوية.</p>
+        <ul class="ticks">
+          <li><b>«اتصل بأحمد بكرة 5:30 !!»</b> تصير مهمة بموعد وأولوية</li>
+          <li>مهام تتكرر: كل يوم، أو أيام الدوام، أو أيام تختارها</li>
+          <li>مهام الأسبوع، وإذا يومك فاضي يقترح لك منها</li>
+          <li>خطة الصباح ومراجعة آخر اليوم في دقيقة</li>
+        </ul>
+      </div>
+      <figure class="frame"><img src="img/calendar.webp" alt="التقويم الشهري مع جدول اليوم" loading="lazy" width="1440" height="900"></figure>
+    </div>
+  </section>
+
+  <section class="feature flip">
+    <div class="wrap feat-in reveal">
+      <div class="copy">
+        <span class="kicker">الدفاتر بخط اليد</span>
+        <h2>اكتب بالقلم كأنك على ورق</h2>
+        <p>دفاتر تكتب فيها بقلم Apple أو الماوس، بأقلام تتأثر بالضغط. وتستورد كتب PDF وتكتب عليها، وتحتفظ بكل ملخصاتك في مكان واحد.</p>
+        <ul class="ticks">
+          <li>قلم حبر وقلم جاف وفرشاة، وقلم تظليل وممحاة</li>
+          <li>شخبط فوق الكلمة وتنمسح، وارسم شكل واثبت وينضبط</li>
+          <li>ليزر للشرح، وأداة تحديد، وصور، ومربعات نص</li>
+          <li>قوالب ورق ومخططات جاهزة، وتصدير PDF</li>
+        </ul>
+      </div>
+      <figure class="frame"><img src="img/notebook.webp" alt="دفتر مكتوب بخط اليد عن تركيب الخلية" loading="lazy" width="1440" height="900"></figure>
+    </div>
+  </section>
+
+  <section class="feature">
+    <div class="wrap feat-in reveal">
+      <div class="copy">
+        <span class="kicker">الملاحظات</span>
+        <h2>صفحات تكتب فيها اللي تبي</h2>
+        <p>اكتب <code>/</code> وتطلع لك كل الأوامر: عناوين، ومهام، وجداول، وكود، ومعادلات، وصفحات داخل صفحات. وكل سطر يمشي مع لغته: العربي من اليمين والإنقليزي من اليسار.</p>
+        <ul class="ticks">
+          <li>قوالب: اجتماع، يوميات، مذاكرة، مشروع، خطة أسبوع</li>
+          <li>صور، وفيديو، وملفات PDF تنعرض داخل الصفحة</li>
+          <li>بحث، ومفضلة، وأغلفة وأيقونات للصفحات</li>
+        </ul>
+      </div>
+      <figure class="frame"><img src="img/notes.webp" alt="صفحة ملاحظات فيها جدول أوامر" loading="lazy" width="1440" height="900"></figure>
+    </div>
+  </section>
+
+  <section class="feature flip">
+    <div class="wrap feat-in reveal">
+      <div class="copy">
+        <span class="kicker">العادات</span>
+        <h2>عادات صغيرة، كل يوم</h2>
+        <p>سجّل عاداتك بضغطة، وشوف سلسلتك 🔥 وهي تكبر. العادة اللي مو لها اليوم تختفي، والمتتبع الشهري يوريك وين كنت ثابت.</p>
+        <ul class="ticks">
+          <li>هدف بعدد مرات، مثل ٨ أكواب ماء</li>
+          <li>أيام محددة، وتخفي عادة ليوم واحد بدون ما تنكسر السلسلة</li>
+        </ul>
+      </div>
+      <figure class="frame"><img src="img/habits.webp" alt="صفحة العادات مع المتتبع الشهري" loading="lazy" width="1440" height="900"></figure>
+    </div>
+  </section>
+
+  <section class="focus" id="focus">
+    <div class="wrap">
+      <div class="focus-copy reveal">
+        <span class="kicker">التركيز</span>
+        <h2>شاشتك كلها للمذاكرة</h2>
+        <p>بومودورو أو مؤقت أو ساعة إيقاف، بملء الشاشة. اختر من ستة أشكال: رقمي، وقلّاب، ودائرة، وقرص، وليد، وموج. وشغّل صوت هادي يعزلك عن اللي حولك.</p>
+      </div>
+      <div class="focus-shots reveal">
+        <img src="img/focus.webp" alt="ساعة قلّابة بملء الشاشة" loading="lazy" width="1440" height="900">
+        <img src="img/focus-ring.webp" alt="مؤقت دائري بلون الغروب" loading="lazy" width="1440" height="900">
+      </div>
+    </div>
+  </section>
+
+  <section class="grid-sec">
+    <div class="wrap">
+      <h2 class="center reveal">وأشياء ثانية تفرق</h2>
+      <div class="grid reveal">
+        <div class="card"><span class="ic">✈️</span><b>يشتغل بدون إنترنت</b><p>كل شي على جهازك، والنت بس للمزامنة.</p></div>
+        <div class="card"><span class="ic">🔄</span><b>مزامنة بين أجهزتك</b><p>عن طريق قوقل درايف حقك. ماك وويندوز وآيباد وآيفون.</p></div>
+        <div class="card"><span class="ic">🌙</span><b>هجري وميلادي</b><p>التاريخ الهجري جنب الميلادي في كل مكان.</p></div>
+        <div class="card"><span class="ic">⌚</span><b>شريط القوائم</b><p>مهام اليوم والتقويم والملاحظات من أعلى الشاشة بدون ما تفتح التطبيق.</p></div>
+        <div class="card"><span class="ic">📅</span><b>تقويم الماك والنوتش</b><p>مواعيدك ومهامك تطلع في تقويم الماك، وفي تطبيقات مثل Boring Notch.</p></div>
+        <div class="card"><span class="ic">🌗</span><b>فاتح وداكن</b><p>يتبع جهازك، أو تختار أنت.</p></div>
+        <div class="card"><span class="ic">🔒</span><b>خصوصيتك</b><p>ما فيه حساب، ولا إعلانات، ولا ذكاء اصطناعي يقرأ بياناتك.</p></div>
+        <div class="card"><span class="ic">💛</span><b>مجاني ومفتوح المصدر</b><p>الكود كامل على GitHub، وتقدر تشوفه وتعدل عليه.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="download" id="download">
+    <div class="wrap">
+      <h2 class="center reveal">حمّل مدار</h2>
+      <p class="center sub reveal">مجاني على كل الأجهزة. <span data-version-long></span></p>
+      <div class="dl reveal">
+        <div class="dl-card" data-os="mac">
+          <span class="os"><svg viewBox="0 0 24 24"><path d="M16.4 12.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.2-2.8.8-3.5.8-.7 0-1.8-.8-3-.8-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.4 2.9 2.3 1.2 0 1.6-.7 3-.7s1.8.7 3 .7c1.3 0 2.1-1.1 2.8-2.3.9-1.3 1.3-2.6 1.3-2.6s-2.5-1-2.5-3.7zM14.1 5.8c.6-.8 1.1-1.9 1-3-1 0-2.1.7-2.8 1.5-.6.7-1.2 1.8-1 2.9 1.1.1 2.2-.6 2.8-1.4z" fill="currentColor"/></svg></span>
+          <b>ماك</b>
+          <small>Apple Silicon (M1 وأحدث)</small>
+          <a class="btn primary" data-asset="dmg" href="https://github.com/tuwra/madar/releases/latest">تحميل للماك</a>
+          <details><summary>أول مرة تفتحه</summary><p>اسحب مدار لمجلد التطبيقات. وأول مرة: كليك يمين على التطبيق ← فتح ← فتح، لأنه مو موقّع من Apple.</p></details>
+        </div>
+        <div class="dl-card" data-os="win">
+          <span class="os"><svg viewBox="0 0 24 24"><path d="M3 5.5 10.5 4.4v7.1H3zm8.5-1.2L21 3v8.5h-9.5zM3 12.5h7.5v7.1L3 18.5zm8.5 0H21V21l-9.5-1.3z" fill="currentColor"/></svg></span>
+          <b>ويندوز</b>
+          <small>ويندوز 10 و 11</small>
+          <a class="btn primary" data-asset="exe" href="https://github.com/tuwra/madar/releases/latest">تحميل للويندوز</a>
+          <details><summary>إذا طلع تحذير</summary><p>إذا طلعت «Windows protected your PC»، اضغط More info وبعدها Run anyway.</p></details>
+        </div>
+        <div class="dl-card" data-os="ios">
+          <span class="os"><svg viewBox="0 0 24 24"><rect x="5" y="2.5" width="14" height="19" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10.5 18.5h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+          <b>آيباد وآيفون</b>
+          <small>من Safari، مثل التطبيق</small>
+          <a class="btn primary" href="app/">افتح مدار</a>
+          <details open><summary>حطه على الشاشة الرئيسية</summary><p>افتحه من Safari، واضغط زر المشاركة ← <b>إضافة إلى الشاشة الرئيسية</b>. تطلع لك أيقونة مدار مثل أي تطبيق.</p></details>
+        </div>
+        <div class="dl-card" data-os="web">
+          <span class="os"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 12h18M12 3c2.8 3 2.8 15 0 18M12 3c-2.8 3-2.8 15 0 18" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></span>
+          <b>المتصفح</b>
+          <small>أي جهاز، بدون تثبيت</small>
+          <a class="btn primary" href="app/">استخدمه في المتصفح</a>
+          <details><summary>وين تنحفظ بياناتي؟</summary><p>في متصفحك على نفس الجهاز. وتقدر تربطه بقوقل درايف عشان يتزامن مع أجهزتك الثانية.</p></details>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="faq" id="faq">
+    <div class="wrap narrow">
+      <h2 class="center reveal">أسئلة</h2>
+      <div class="qa reveal">
+        <details><summary>هل مدار مجاني؟</summary><p>إيه، مجاني بالكامل ومفتوح المصدر برخصة MIT. ما فيه اشتراك ولا إعلانات.</p></details>
+        <details><summary>وين تنحفظ بياناتي؟</summary><p>على جهازك. وإذا تبي تزامن بين أجهزتك، سجّل دخولك بقوقل من «الحفظ والمزامنة»، وتنحفظ نسخة في قوقل درايف حقك أنت، مو عندنا.</p></details>
+        <details><summary>أقدر أستخدمه على الآيباد بقلم Apple؟</summary><p>إيه. افتحه من Safari وحطه على الشاشة الرئيسية، والدفاتر تشتغل بالقلم مع الضغط، وإصبعك يحرّك الصفحة.</p></details>
+        <details><summary>عندي ماك Intel، يشتغل؟</summary><p>نسخة الماك حاليًا لأجهزة Apple Silicon (M1 وأحدث). على ماك Intel استخدمه من المتصفح، وكل شي يشتغل.</p></details>
+        <details><summary>كيف يوصلني التحديث؟</summary><p>على الماك والويندوز يطلع لك شريط «حدّث الحين» داخل التطبيق، يحدّث ويرجع يفتح لحاله. والمتصفح يتحدث لحاله.</p></details>
+        <details><summary>فيه ذكاء اصطناعي؟</summary><p>لا. مدار ما يرسل بياناتك لأي خدمة ذكاء اصطناعي.</p></details>
+        <details><summary>لقيت مشكلة أو عندي فكرة</summary><p>اكتبها في <a href="https://github.com/tuwra/madar/issues">صفحة المشاكل على GitHub</a>.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <section class="final">
+    <div class="wrap final-in reveal">
+      <img src="icon.svg" alt="" width="72" height="72">
+      <h2>جرّبه الحين، ما يحتاج حساب</h2>
+      <div class="cta">
+        <a class="btn big primary" href="app/">استخدمه في المتصفح</a>
+        <a class="btn big ghost" href="#download">حمّله لجهازك</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <span>© 2026 رائد العتيبي · صمّمه وطوّره</span>
+    <nav>
+      <a href="https://github.com/tuwra/madar">GitHub</a>
+      <a href="https://github.com/tuwra/madar/blob/main/PRIVACY.md">الخصوصية</a>
+      <a href="https://github.com/tuwra/madar/releases">كل الإصدارات</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="main.js" defer></script>
+</body>
+</html>

@@ -8,3 +8,5 @@ src/.claude/
 # Google sign-in IDs for local builds (CI writes this file from repository secrets)
 src/google-config.local.js
 madar-logo-120.png
+site/app
+_site

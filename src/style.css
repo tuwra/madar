@@ -1187,3 +1187,10 @@ dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 40px); 
 .week-suggest { width: 100%; text-align: start; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 10px; }
 .week-suggest > b { display: block; font-size: 13px; font-weight: 500; color: var(--muted); margin-bottom: 4px; }
 
+
+/* phones: nine items don't fit across, so the bar scrolls sideways instead of squashing them */
+@media (max-width: 760px) {
+  #nav { justify-content: flex-start; overflow-x: auto; scrollbar-width: none; }
+  #nav::-webkit-scrollbar { display: none; }
+  .nav-item { flex: 1 0 60px; white-space: nowrap; }
+}

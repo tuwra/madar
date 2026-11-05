@@ -50,7 +50,7 @@ function webAuthUrl(withCal, silent) {
   const st = rand(16);
   try { sessionStorage.setItem('madar-oauth', JSON.stringify({ st, withCal })); } catch { /* private mode */ }
   return 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
-    client_id: GCFG.webId, redirect_uri: location.origin + location.pathname.replace(/index\.html$/, ''), response_type: 'token',
+    client_id: GCFG.webId, redirect_uri: location.origin + location.pathname.replace(/index\.html$/, '').replace(/app\/$/, ''), // the site's front page, registered with Google; it hands the answer on to app/ response_type: 'token',
     scope: withCal ? `${SCOPE} ${CAL_SCOPE}` : SCOPE, state: st, include_granted_scopes: 'true',
     ...(silent ? { prompt: 'none', login_hint: tok?.email || '' } : { prompt: 'select_account' }),
   });
